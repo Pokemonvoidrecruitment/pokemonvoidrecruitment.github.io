@@ -1,0 +1,18 @@
+# Secrets & Environment variables (never commit bot tokens or secrets!)
+.env
+.env*.local
+
+# Node dependencies
+node_modules/
+
+# Local database storage
+data/
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+
+# System & OS files
+.DS_Store
+Thumbs.db
+npm-debug.log*
