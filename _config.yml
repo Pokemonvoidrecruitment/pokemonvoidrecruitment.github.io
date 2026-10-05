@@ -1,0 +1,16 @@
+# GitHub Pages Configuration
+# Strictly exclude backend source code, configs, and repository files from static site publishing
+
+exclude:
+  - src
+  - data
+  - node_modules
+  - package.json
+  - package-lock.json
+  - test-e2e.js
+  - DEPLOYMENT.md
+  - README.md
+  - .env.example
+  - .env.example.bak
+  - .node-version
+  - .github
