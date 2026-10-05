@@ -46,17 +46,17 @@ app.use(express.static(path.join(__dirname, "../public")));
 app.use(express.static(path.join(__dirname, "..")));
 
 async function discordToken(code) {
+  const credentials = Buffer.from(`${config.discord.clientId}:${config.discord.clientSecret}`).toString("base64");
   const params = new URLSearchParams({
-    client_id: config.discord.clientId,
-    client_secret: config.discord.clientSecret,
     grant_type: "authorization_code",
     code,
     redirect_uri: config.discord.redirectUri
   });
-  const r = await fetch("https://discord.com/api/oauth2/token", {
+  const r = await fetch("https://discord.com/api/v10/oauth2/token", {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
+      "Authorization": `Basic ${credentials}`,
       "User-Agent": "DiscordBot (https://pokemonvoidrecruitment.github.io, 1.0.0)"
     },
     body: params
@@ -71,7 +71,7 @@ async function discordToken(code) {
 }
 
 async function discordUser(accessToken) {
-  const r = await fetch("https://discord.com/api/users/@me", {
+  const r = await fetch("https://discord.com/api/v10/users/@me", {
     headers: {
       Authorization: `Bearer ${accessToken}`,
       "User-Agent": "DiscordBot (https://pokemonvoidrecruitment.github.io, 1.0.0)"
