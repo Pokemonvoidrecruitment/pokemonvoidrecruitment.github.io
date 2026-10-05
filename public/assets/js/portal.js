@@ -152,7 +152,7 @@
       text("[data-empty-title]", "No application submitted");
       text(
         "[data-empty-copy]",
-        "Sign in with Discord or use the test switcher above to begin an application.",
+        "Sign in with Discord to view your application status.",
       );
     }
     $("[data-status-examples]").hidden = false;

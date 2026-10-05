@@ -437,7 +437,7 @@
     const session = await helpers.loadSession();
     if (!session?.user) {
       message.className = "notice-strip error";
-      message.innerHTML = 'Discord sign-in is required to submit your application. Please <a href="' + helpers.loginUrl(window.location.href) + '" class="text-link">sign in with Discord</a> or click <strong>Sign in as Applicant</strong> in the test switcher at the top.';
+      message.innerHTML = 'Discord sign-in is required to submit your application. Please <a href="' + helpers.loginUrl(window.location.href) + '" class="text-link">sign in with Discord</a> to continue.';
       message.hidden = false;
       message.focus();
       return;
