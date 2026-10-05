@@ -77,6 +77,18 @@ function getEmbedColor(status, event) {
 
 export async function notifyDirectors({event,applicationId,displayName,roles,status}){
   if(!discord.isReady() || !config.discord.directorChannelId) return;
+
+  // Suppress automated notifications for test runners and dev accounts
+  const isTestUser = displayName && (
+    displayName.toLowerCase().startsWith("dev-") ||
+    displayName === "Red" ||
+    displayName === "Ash Ketchum"
+  );
+  if (isTestUser) {
+    console.log(`[discord] Skipping notification for automated test user: ${displayName}`);
+    return;
+  }
+
   try {
     const channel = await discord.channels.fetch(config.discord.directorChannelId).catch(()=>null);
     if(!channel?.isTextBased()) return;
@@ -92,9 +104,10 @@ export async function notifyDirectors({event,applicationId,displayName,roles,sta
       {name:"Roles",value:(roles||[]).join(", ") || "—",inline:true},
       ...(status ? [{name:"Status",value:status,inline:true}] : [])
     );
-    if (config.publicBaseUrl) {
-      embed.setDescription(`[Open Director Portal](${config.publicBaseUrl}/admin.html)`);
-    }
+
+    const portalUrl = `${config.frontendOrigin || "https://pokemonvoidrecruitment.github.io"}/admin.html`;
+    embed.setDescription(`[Open Director Desk](${portalUrl})`);
+
     await channel.send({embeds:[embed]});
   } catch(err) {
     console.warn("[discord] Notification dispatch failed:", err.message);
@@ -103,6 +116,7 @@ export async function notifyDirectors({event,applicationId,displayName,roles,sta
 
 export async function dmApplicant(userId, message){
   if(!config.discord.applicantDMs || !discord.isReady() || !userId) return;
+  if(String(userId).startsWith("dev-")) return;
   try {
     const user = await discord.users.fetch(userId).catch(()=>null);
     if(user) await user.send(message).catch(()=>{});
