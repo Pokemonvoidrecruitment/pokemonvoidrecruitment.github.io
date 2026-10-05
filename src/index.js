@@ -46,18 +46,24 @@ app.use(express.static(path.join(__dirname, "../public")));
 app.use(express.static(path.join(__dirname, "..")));
 
 async function discordToken(code) {
+  const params = new URLSearchParams({
+    client_id: config.discord.clientId,
+    client_secret: config.discord.clientSecret,
+    grant_type: "authorization_code",
+    code,
+    redirect_uri: config.discord.redirectUri
+  });
   const r = await fetch("https://discord.com/api/oauth2/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: config.discord.clientId,
-      client_secret: config.discord.clientSecret,
-      grant_type: "authorization_code",
-      code,
-      redirect_uri: config.discord.redirectUri
-    })
+    body: params
   });
-  if (!r.ok) throw new Error("Discord OAuth token exchange failed");
+  if (!r.ok) {
+    const errorBody = await r.text();
+    console.error(`[discord] Token exchange failed with HTTP ${r.status}:`, errorBody);
+    console.error(`[discord] Debug params: client_id=${config.discord.clientId}, redirect_uri=${config.discord.redirectUri}`);
+    throw new Error(`Discord OAuth token exchange failed (${r.status}): ${errorBody}`);
+  }
   return r.json();
 }
 
