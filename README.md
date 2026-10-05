@@ -1,8 +1,8 @@
 # Pokémon Void Recruitment Backend
 
-This is the production-oriented backend for the existing Team Application front end plus Discord notification/DM integration.
 
-## Responsibilities
+
+## What it can do
 - Discord OAuth login and session handling.
 - Store application records in the application backend's SQLite database.
 - Provide the existing front end's `/api/*` contract.
