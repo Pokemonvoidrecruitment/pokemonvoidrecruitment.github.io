@@ -1,6 +1,7 @@
 import "dotenv/config";
 
-const defaultBaseUrl = (process.env.PUBLIC_BASE_URL || process.env.RENDER_EXTERNAL_URL || "http://localhost:3000").replace(/\/$/, "");
+const railwayBase = process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : "";
+const defaultBaseUrl = (process.env.PUBLIC_BASE_URL || railwayBase || process.env.RENDER_EXTERNAL_URL || "http://localhost:3000").replace(/\/$/, "");
 const defaultRedirectUri = process.env.DISCORD_REDIRECT_URI || `${defaultBaseUrl}/auth/discord/callback`;
 
 const required = ["DISCORD_CLIENT_ID","DISCORD_CLIENT_SECRET","DISCORD_BOT_TOKEN","DISCORD_GUILD_ID","DIRECTOR_ROLE_ID","DIRECTOR_CHANNEL_ID"];
