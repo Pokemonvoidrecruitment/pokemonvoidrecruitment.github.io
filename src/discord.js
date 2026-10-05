@@ -105,7 +105,7 @@ export async function notifyDirectors({event,applicationId,displayName,roles,sta
       ...(status ? [{name:"Status",value:status,inline:true}] : [])
     );
 
-    const portalUrl = `${config.frontendOrigin || "https://pokemonvoidrecruitment.github.io"}/admin.html`;
+    const portalUrl = `${(config.frontendOrigin || "https://pokemonvoidrecruitment.github.io").replace(/\/$/, "")}/admin`;
     embed.setDescription(`[Open Director Desk](${portalUrl})`);
 
     await channel.send({embeds:[embed]});
@@ -116,10 +116,18 @@ export async function notifyDirectors({event,applicationId,displayName,roles,sta
 
 export async function dmApplicant(userId, message){
   if(!config.discord.applicantDMs || !discord.isReady() || !userId) return;
-  if(String(userId).startsWith("dev-")) return;
+  if(String(userId).startsWith("dev-") || String(userId) === "dev-applicant-red") return;
   try {
     const user = await discord.users.fetch(userId).catch(()=>null);
-    if(user) await user.send(message).catch(()=>{});
-  } catch {}
+    if (!user) {
+      console.warn(`[discord] Could not fetch user ${userId} to dispatch DM.`);
+      return;
+    }
+    const payload = typeof message === "string" ? { content: message } : message;
+    await user.send(payload);
+    console.log(`[discord] Dispatched recruitment DM to ${user.tag} (${userId})`);
+  } catch (err) {
+    console.warn(`[discord] Failed to DM user ${userId}:`, err.message);
+  }
 }
 

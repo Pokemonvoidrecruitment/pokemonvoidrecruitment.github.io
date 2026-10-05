@@ -8,6 +8,7 @@ import crypto from "node:crypto";
 import { config } from "./config.js";
 import { db, statements, appView } from "./db.js";
 import { randomToken, sha256, sign, safeEqual } from "./security.js";
+import { EmbedBuilder } from "discord.js";
 import { startDiscord, isDirector, notifyDirectors, dmApplicant } from "./discord.js";
 
 const app = express();
@@ -42,8 +43,8 @@ app.use(express.json({
 app.use(cookieParser());
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-app.use(express.static(path.join(__dirname, "../public")));
-app.use(express.static(path.join(__dirname, "..")));
+app.use(express.static(path.join(__dirname, "../public"), { extensions: ["html"] }));
+app.use(express.static(path.join(__dirname, ".."), { extensions: ["html"] }));
 
 async function discordToken(code) {
   const credentials = Buffer.from(`${config.discord.clientId}:${config.discord.clientSecret}`).toString("base64");
@@ -295,12 +296,14 @@ app.post("/api/application", requireUser, (req, res) => {
     0
   );
 
-  notifyDirectors({
-    event: "NEW_APPLICATION",
-    applicationId: id,
-    displayName: body.profile.name.trim(),
-    roles
-  }).catch(console.error);
+  if (!String(req.user.discord_user_id || "").startsWith("dev-")) {
+    notifyDirectors({
+      event: "NEW_APPLICATION",
+      applicationId: id,
+      displayName: body.profile.name.trim(),
+      roles
+    }).catch(console.error);
+  }
 
   res.status(201).json({ id, status: "Submitted", submittedAt: now });
 });
@@ -368,12 +371,14 @@ app.post("/api/interview/message", requireUser, (req, res) => {
   const updatedNow = now.toISOString();
   statements.saveInterview.run(row.id, ticket.status, JSON.stringify(messages), updatedNow);
 
-  notifyDirectors({
-    event: "NEW_INTERVIEW_MESSAGE",
-    applicationId: row.id,
-    displayName: req.user.global_name || row.display_name,
-    status: ticket.status
-  }).catch(console.error);
+  if (!String(req.user.discord_user_id || "").startsWith("dev-")) {
+    notifyDirectors({
+      event: "NEW_INTERVIEW_MESSAGE",
+      applicationId: row.id,
+      displayName: req.user.global_name || row.display_name,
+      status: ticket.status
+    }).catch(console.error);
+  }
 
   res.json({
     ok: true,
@@ -447,12 +452,45 @@ app.post("/api/admin/applications/:id/status", requireDirector, (req, res) => {
     status
   }).catch(console.error);
 
+  const cleanOrigin = (config.frontendOrigin || "https://pokemonvoidrecruitment.github.io").replace(/\/$/, "");
   if (status === "Interview") {
-    dmApplicant(row.discord_user_id, `Your Pokémon Void recruitment application (${row.id}) has been invited to an interview. Please open the recruitment site to continue.`);
+    dmApplicant(row.discord_user_id, {
+      embeds: [
+        new EmbedBuilder()
+          .setTitle("Pokémon Void — Interview Stage")
+          .setColor(0x06b6d4)
+          .setDescription(`Hello **${row.display_name}**! 👋\n\nYour recruitment application (**${row.id}**) for **${(a.roles || []).join(", ") || "the team"}** has advanced to the **Interview** stage!\n\nThe Pokémon Void leadership team would love to ask you a few follow-up questions.`)
+          .addFields(
+            { name: "Application ID", value: row.id, inline: true },
+            { name: "Interview Portal", value: `[Open Interview & Status Desk](${cleanOrigin}/status)`, inline: true }
+          )
+          .setFooter({ text: "Pokémon Void Recruitment Team" })
+          .setTimestamp()
+      ]
+    });
   } else if (status === "Accepted") {
-    dmApplicant(row.discord_user_id, `Your Pokémon Void recruitment application (${row.id}) has been accepted. The recruitment team will contact you with next steps.`);
+    dmApplicant(row.discord_user_id, {
+      embeds: [
+        new EmbedBuilder()
+          .setTitle("Pokémon Void — Application Accepted! 🎉")
+          .setColor(0x22c55e)
+          .setDescription(`Congratulations **${row.display_name}**!\n\nYour application (**${row.id}**) to join Pokémon Void has been **Accepted**! The leadership team will reach out with onboarding details soon.`)
+          .addFields({ name: "Application Status", value: `[View Status Portal](${cleanOrigin}/status)` })
+          .setFooter({ text: "Pokémon Void Recruitment Team" })
+          .setTimestamp()
+      ]
+    });
   } else if (status === "Declined") {
-    dmApplicant(row.discord_user_id, `Your Pokémon Void recruitment application (${row.id}) will not be moving forward at this time.`);
+    dmApplicant(row.discord_user_id, {
+      embeds: [
+        new EmbedBuilder()
+          .setTitle("Pokémon Void — Recruitment Update")
+          .setColor(0xef4444)
+          .setDescription(`Hello **${row.display_name}**,\n\nThank you for your interest in joining Pokémon Void. After careful review, we will not be moving forward with your application (**${row.id}**) at this time.\n\nWe appreciate the time you took to share your work with us and wish you the best!`)
+          .setFooter({ text: "Pokémon Void Recruitment Team" })
+          .setTimestamp()
+      ]
+    });
   }
 
   res.json({ ok: true, status, archived: Boolean(isArchived), updatedAt: now });
@@ -489,7 +527,17 @@ app.post("/api/admin/applications/:id/interview/message", requireDirector, (req,
   const updatedNow = now.toISOString();
   statements.saveInterview.run(row.id, ticket.status, JSON.stringify(messages), updatedNow);
 
-  dmApplicant(row.discord_user_id, `You have a new message on your Pokémon Void recruitment interview ticket (${row.id}). Please check the recruitment site.`);
+  dmApplicant(row.discord_user_id, {
+    embeds: [
+      new EmbedBuilder()
+        .setTitle("Pokémon Void — New Interview Message")
+        .setColor(0x0ea5e9)
+        .setDescription(`You have a new message on your interview ticket for application **${row.id}**:\n\n> *${text.length > 280 ? text.slice(0, 277) + "..." : text}*`)
+        .addFields({ name: "Reply to Directors", value: `[Open Interview Ticket](${cleanOrigin}/interview)` })
+        .setFooter({ text: "Pokémon Void Recruitment Team" })
+        .setTimestamp()
+    ]
+  });
 
   res.json({
     ok: true,
