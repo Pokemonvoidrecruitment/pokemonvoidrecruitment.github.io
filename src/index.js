@@ -182,30 +182,27 @@ function timeline(status) {
 app.get("/health", (_, res) => res.json({ ok: true, devMode: config.isDev }));
 
 // Dev / Testing login (strictly disabled in production and cloud deployments)
-app.get("/auth/dev/login", (req, res) => {
-  if (config.isProduction || !config.isDev || process.env.ENABLE_DEV_LOGIN !== "true") {
-    return res.status(403).send("Dev login is disabled.");
-  }
-  const role = String(req.query.role || "applicant").toLowerCase();
-  const name = String(req.query.name || (role === "director" ? "Director Oak" : "Ash Ketchum")).trim();
-  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "_") || "user";
-  const user = {
-    id: role === "director" ? "dev-director" : `dev-applicant-${slug}`,
-    username: slug,
-    global_name: name
-  };
-  setSession(res, user);
-  let returnTo = req.query.returnTo || (role === "director" ? "/admin.html" : "/status.html");
-  if (!returnTo.startsWith("/") && !returnTo.startsWith("http")) returnTo = "/" + returnTo;
-  res.redirect(returnTo);
-});
-
-app.get("/auth/dev/*", (req, res) => {
-  if (config.isProduction || !config.isDev || process.env.ENABLE_DEV_LOGIN !== "true") {
-    return res.status(403).send("Dev endpoints are disabled.");
-  }
-  res.redirect("/");
-});
+if (config.isProduction || !config.isDev || process.env.ENABLE_DEV_LOGIN !== "true") {
+  app.use("/auth/dev", (req, res) => {
+    res.status(403).send("Dev endpoints are disabled.");
+  });
+} else {
+  app.get("/auth/dev/login", (req, res) => {
+    const role = String(req.query.role || "applicant").toLowerCase();
+    const name = String(req.query.name || (role === "director" ? "Director Oak" : "Ash Ketchum")).trim();
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "_") || "user";
+    const user = {
+      id: role === "director" ? "dev-director" : `dev-applicant-${slug}`,
+      username: slug,
+      global_name: name
+    };
+    setSession(res, user);
+    let returnTo = req.query.returnTo || (role === "director" ? "/admin.html" : "/status.html");
+    if (!returnTo.startsWith("/") && !returnTo.startsWith("http")) returnTo = "/" + returnTo;
+    res.redirect(returnTo);
+  });
+  app.use("/auth/dev", (req, res) => res.redirect("/"));
+}
 
 app.get("/auth/discord", (req, res) => {
   // If Discord credentials are not yet configured, automatically fall back to dev login in dev mode
