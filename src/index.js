@@ -55,7 +55,10 @@ async function discordToken(code) {
   });
   const r = await fetch("https://discord.com/api/oauth2/token", {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "User-Agent": "DiscordBot (https://pokemonvoidrecruitment.github.io, 1.0.0)"
+    },
     body: params
   });
   if (!r.ok) {
@@ -69,7 +72,10 @@ async function discordToken(code) {
 
 async function discordUser(accessToken) {
   const r = await fetch("https://discord.com/api/users/@me", {
-    headers: { Authorization: `Bearer ${accessToken}` }
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "User-Agent": "DiscordBot (https://pokemonvoidrecruitment.github.io, 1.0.0)"
+    }
   });
   if (!r.ok) throw new Error("Discord user lookup failed");
   return r.json();
