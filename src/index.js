@@ -14,8 +14,23 @@ const app = express();
 app.set("trust proxy", 1);
 
 // CORS configuration
-const allowedOrigin = config.frontendOrigin || (config.isDev ? true : false);
-app.use(cors({ origin: allowedOrigin, credentials: true }));
+const allowedOrigins = new Set([
+  config.frontendOrigin,
+  config.frontendOrigin ? config.frontendOrigin.replace(/\/$/, "") : null,
+  "https://pokemonvoidrecruitment.github.io",
+  "http://localhost:3000"
+].filter(Boolean));
+
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.has(origin) || allowedOrigins.has(origin.replace(/\/$/, "")) || config.isDev) {
+      callback(null, true);
+    } else {
+      callback(null, false);
+    }
+  },
+  credentials: true
+}));
 
 // Store rawBody for webhook HMAC verification
 app.use(express.json({
