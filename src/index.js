@@ -14,10 +14,12 @@ import multer from "multer";
 import fs from "node:fs";
 
 const app = express();
+app.disable("x-powered-by");
 app.set("trust proxy", 1);
 
 // HTTP Security Headers
 app.use((_req, res, next) => {
+  res.setHeader("Content-Security-Policy", "default-src 'self' https:; script-src 'self' 'unsafe-inline' https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; media-src 'self' https: blob:; connect-src 'self' https: http://localhost:3000; frame-ancestors 'self'; base-uri 'self'; object-src 'none';");
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "SAMEORIGIN");
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
