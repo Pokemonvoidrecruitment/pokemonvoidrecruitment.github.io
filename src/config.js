@@ -1,10 +1,13 @@
 import "dotenv/config";
 
-const required = ["DISCORD_CLIENT_ID","DISCORD_CLIENT_SECRET","DISCORD_REDIRECT_URI","DISCORD_BOT_TOKEN","DISCORD_GUILD_ID","DIRECTOR_ROLE_ID","DIRECTOR_CHANNEL_ID","INTERNAL_EVENT_SECRET"];
-for (const key of required) if (!process.env[key]) console.warn(`[config] Missing ${key}; related functionality will be unavailable.`);
-
 const defaultBaseUrl = (process.env.PUBLIC_BASE_URL || process.env.RENDER_EXTERNAL_URL || "http://localhost:3000").replace(/\/$/, "");
 const defaultRedirectUri = process.env.DISCORD_REDIRECT_URI || `${defaultBaseUrl}/auth/discord/callback`;
+
+const required = ["DISCORD_CLIENT_ID","DISCORD_CLIENT_SECRET","DISCORD_BOT_TOKEN","DISCORD_GUILD_ID","DIRECTOR_ROLE_ID","DIRECTOR_CHANNEL_ID","INTERNAL_EVENT_SECRET"];
+for (const key of required) {
+  if (!process.env[key]) console.warn(`[config] Missing ${key}; related functionality will be unavailable.`);
+}
+console.log(`[config] OAuth Redirect URI: ${defaultRedirectUri}`);
 
 export const config = {
   port: Number(process.env.PORT || 3000),
