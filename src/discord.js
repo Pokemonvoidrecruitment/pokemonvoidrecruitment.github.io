@@ -67,15 +67,6 @@ function setupMessageListener(client) {
     // React with a checkmark so applicant knows their message reached the Director Desk
     await message.react("✅").catch(() => {});
 
-    // Notify Directors in their Discord channel
-    notifyDirectors({
-      event: "NEW_INTERVIEW_MESSAGE",
-      applicationId: app.id,
-      displayName: message.author.globalName || message.author.username || app.display_name,
-      status: "Interview",
-      preview: text
-    }).catch(console.error);
-
     console.log(`[discord] Received DM from ${message.author.tag} (${userId}) for ${app.id} -> Saved to interview ticket`);
   });
 }

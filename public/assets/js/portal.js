@@ -183,6 +183,53 @@
     });
   }
 
+  function renderMessageBody(rawText) {
+    const container = document.createElement("div");
+    container.className = "ticket-body";
+    if (!rawText) return container;
+
+    // Sanitize text first
+    let safe = String(rawText)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+
+    // Replace Discord custom emojis: <:name:id> or <a:name:id>
+    safe = safe.replace(/&lt;(a)?:([a-zA-Z0-9_]+):([0-9]+)&gt;/g, (match, anim, name, id) => {
+      const ext = anim ? "gif" : "png";
+      return `<img class="discord-emoji" src="https://cdn.discordapp.com/emojis/${id}.${ext}?size=48" alt=":${name}:" title=":${name}:" loading="lazy" style="width: 1.45em; height: 1.45em; vertical-align: -0.3em; display: inline-block; object-fit: contain;">`;
+    });
+
+    // Detect media URLs and standard URLs
+    const mediaNodes = [];
+    const urlRegex = /(https?:\/\/[^\s<]+)/g;
+
+    safe = safe.replace(urlRegex, (url) => {
+      const cleanUrl = url.split("?")[0].toLowerCase();
+      const isImg = /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(cleanUrl) ||
+        /cdn\.discordapp\.com\/attachments\/.*\.(png|jpe?g|gif|webp)/i.test(url) ||
+        /media\.discordapp\.net\/attachments\/.*\.(png|jpe?g|gif|webp)/i.test(url) ||
+        /i\.imgur\.com\/.*\.(png|jpe?g|gif|webp)/i.test(url);
+
+      const isVideo = /\.(mp4|webm|mov|ogg)$/i.test(cleanUrl) ||
+        /cdn\.discordapp\.com\/attachments\/.*\.(mp4|webm|mov)/i.test(url);
+
+      if (isImg) {
+        mediaNodes.push(`<a href="${url}" target="_blank" rel="noopener noreferrer" style="display:block; margin-top:8px;"><img class="ticket-media-img" src="${url}" loading="lazy" alt="Attachment" style="max-width: 100%; max-height: 400px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); display: block;" onerror="this.onerror=null;this.style.display='none';"></a>`);
+        return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="ticket-link" style="color: #38bdf8; text-decoration: underline; word-break: break-all;">${url}</a>`;
+      } else if (isVideo) {
+        mediaNodes.push(`<div style="margin-top:8px;"><video class="ticket-media-video" controls playsinline src="${url}" preload="metadata" style="max-width: 100%; max-height: 400px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); display: block;"></video></div>`);
+        return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="ticket-link" style="color: #38bdf8; text-decoration: underline; word-break: break-all;">${url}</a>`;
+      } else {
+        return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="ticket-link" style="color: #38bdf8; text-decoration: underline; word-break: break-all;">${url}</a>`;
+      }
+    });
+
+    safe = safe.replace(/\n/g, "<br>");
+    container.innerHTML = safe + (mediaNodes.length ? mediaNodes.join("") : "");
+    return container;
+  }
+
   function renderTicket(ticket, example = false) {
     $("#interview-panel").hidden = false;
     text("[data-ticket-id]", ticket.id);
@@ -200,9 +247,7 @@
       const when = document.createElement("span");
       when.textContent = item.sentAt || "";
       meta.append(sender, when);
-      const body = document.createElement("div");
-      body.className = "ticket-body";
-      body.textContent = item.body || "";
+      const body = renderMessageBody(item.body || "");
       entry.append(meta, body);
       log.append(entry);
     }
@@ -343,9 +388,7 @@
       const when = document.createElement("span");
       when.textContent = item.sentAt || "";
       meta.append(sender, when);
-      const body = document.createElement("div");
-      body.className = "ticket-body";
-      body.textContent = item.body || "";
+      const body = renderMessageBody(item.body || "");
       entry.append(meta, body);
       interviewLog.append(entry);
     }

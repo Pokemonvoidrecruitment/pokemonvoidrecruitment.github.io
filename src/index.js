@@ -371,15 +371,6 @@ app.post("/api/interview/message", requireUser, (req, res) => {
   const updatedNow = now.toISOString();
   statements.saveInterview.run(row.id, ticket.status, JSON.stringify(messages), updatedNow);
 
-  if (!String(req.user.discord_user_id || "").startsWith("dev-")) {
-    notifyDirectors({
-      event: "NEW_INTERVIEW_MESSAGE",
-      applicationId: row.id,
-      displayName: req.user.global_name || row.display_name,
-      status: ticket.status
-    }).catch(console.error);
-  }
-
   res.json({
     ok: true,
     ticket: {
@@ -462,9 +453,10 @@ app.post("/api/admin/applications/:id/status", requireDirector, (req, res) => {
           .setDescription(`Hello **${row.display_name}**! 👋\n\nYour recruitment application (**${row.id}**) for **${(a.roles || []).join(", ") || "the team"}** has advanced to the **Interview** stage!\n\nThe Pokémon Void leadership team would love to ask you a few follow-up questions.`)
           .addFields(
             { name: "Application ID", value: row.id, inline: true },
-            { name: "Interview Portal", value: `[Open Interview & Status Desk](${cleanOrigin}/status)`, inline: true }
+            { name: "Interview Portal", value: `[Open Interview & Status Desk](${cleanOrigin}/status)`, inline: true },
+            { name: "💬 Direct Chat", value: "You can reply directly to this DM to chat with our directors, or use the website portal linked above!", inline: false }
           )
-          .setFooter({ text: "Pokémon Void Recruitment Team" })
+          .setFooter({ text: "💡 You can reply directly to this DM to send your message to the website!" })
           .setTimestamp()
       ]
     });
