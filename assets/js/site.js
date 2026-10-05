@@ -129,78 +129,72 @@
       }
     });
 
-    // If user is a Director, ensure the Director Portal link exists in navigation
-    if (signedIn && session.user.isDirector) {
-      var nav = qs("#site-nav");
-      if (nav && !nav.querySelector('a[href="admin.html"]')) {
-        var adminLink = document.createElement("a");
-        adminLink.href = "admin.html";
-        adminLink.textContent = "Director Portal";
-        adminLink.style.borderColor = "#c69214";
-        adminLink.style.color = "#ffe885";
-        nav.append(adminLink);
+    // Update Header Navigation with Discord Auth Item
+    var nav = qs("#site-nav");
+    if (nav) {
+      var existingAuth = nav.querySelector("#nav-auth-item");
+      if (!existingAuth) {
+        existingAuth = document.createElement("div");
+        existingAuth.id = "nav-auth-item";
+        existingAuth.style.display = "flex";
+        existingAuth.style.alignItems = "center";
+        existingAuth.style.gap = "8px";
+        existingAuth.style.marginLeft = "8px";
+        nav.append(existingAuth);
+      }
+      existingAuth.innerHTML = "";
+
+      var existingAdminLink = nav.querySelector('a[data-director-link="true"]');
+      if (signedIn && session.user.isDirector) {
+        if (!existingAdminLink) {
+          var adminLink = document.createElement("a");
+          adminLink.href = "admin.html";
+          adminLink.dataset.directorLink = "true";
+          adminLink.textContent = "Director Desk";
+          adminLink.style.borderColor = "#c69214";
+          adminLink.style.color = "#ffe885";
+          nav.insertBefore(adminLink, existingAuth);
+        }
+      } else if (existingAdminLink) {
+        existingAdminLink.remove();
+      }
+
+      if (signedIn) {
+        var userBadge = document.createElement("span");
+        userBadge.style.fontSize = "13px";
+        userBadge.style.color = session.user.isDirector ? "#ffd700" : "#cbd5e1";
+        userBadge.style.display = "inline-flex";
+        userBadge.style.alignItems = "center";
+        userBadge.style.gap = "6px";
+        var dotColor = session.user.isDirector ? "#ffd700" : "#22c55e";
+        userBadge.innerHTML = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + dotColor + ';"></span> ' + (session.user.globalName || session.user.username);
+
+        var signOutBtn = document.createElement("button");
+        signOutBtn.type = "button";
+        signOutBtn.className = "button ghost";
+        signOutBtn.style.padding = "3px 8px";
+        signOutBtn.style.fontSize = "12px";
+        signOutBtn.textContent = "Sign out";
+        signOutBtn.addEventListener("click", logout);
+
+        existingAuth.append(userBadge, signOutBtn);
+      } else {
+        var signInBtn = document.createElement("a");
+        signInBtn.href = loginUrl();
+        signInBtn.className = "button primary";
+        signInBtn.style.padding = "4px 12px";
+        signInBtn.style.fontSize = "13px";
+        signInBtn.style.background = "#5865F2";
+        signInBtn.style.borderColor = "#5865F2";
+        signInBtn.style.color = "#fff";
+        signInBtn.textContent = "Sign in with Discord";
+        existingAuth.append(signInBtn);
       }
     }
 
-    // Render Testing Dev Bar if in Dev Mode
-    if (session && session.devMode) {
-      renderDevBar(session);
-    }
-  }
-
-  function renderDevBar(session) {
-    if (qs("#pv-dev-bar")) return;
-    var bar = document.createElement("div");
-    bar.id = "pv-dev-bar";
-    bar.style.background = "#18202d";
-    bar.style.borderBottom = "1px solid #334460";
-    bar.style.padding = "6px 16px";
-    bar.style.fontSize = "13px";
-    bar.style.color = "#cbd5e1";
-    bar.style.display = "flex";
-    bar.style.alignItems = "center";
-    bar.style.gap = "12px";
-    bar.style.flexWrap = "wrap";
-    bar.style.zIndex = "9999";
-
-    var label = document.createElement("span");
-    label.innerHTML = "<strong>Test Switcher:</strong>";
-    bar.append(label);
-
-    var currentPath = window.location.pathname.startsWith("/") ? window.location.pathname : ("/" + window.location.pathname);
-    var applicantBtn = document.createElement("a");
-    applicantBtn.href = (apiBase || "") + "/auth/dev/login?role=applicant&name=Ash Ketchum&returnTo=" + encodeURIComponent(currentPath);
-    applicantBtn.textContent = "Sign in as Applicant";
-    applicantBtn.className = "button ghost";
-    applicantBtn.style.padding = "3px 10px";
-    applicantBtn.style.fontSize = "12px";
-    bar.append(applicantBtn);
-
-    var directorBtn = document.createElement("a");
-    directorBtn.href = (apiBase || "") + "/auth/dev/login?role=director&name=Director Oak&returnTo=" + encodeURIComponent("/admin.html");
-    directorBtn.textContent = "Sign in as Director";
-    directorBtn.className = "button ghost";
-    directorBtn.style.padding = "3px 10px";
-    directorBtn.style.fontSize = "12px";
-    bar.append(directorBtn);
-
-    if (session.user) {
-      var currentLabel = document.createElement("span");
-      currentLabel.style.color = session.user.isDirector ? "#ffd700" : "#a3e635";
-      currentLabel.textContent = "Active: " + (session.user.globalName || session.user.username) + (session.user.isDirector ? " (Director)" : " (Applicant)");
-      bar.append(currentLabel);
-
-      var signOut = document.createElement("button");
-      signOut.type = "button";
-      signOut.className = "text-button";
-      signOut.textContent = "Sign out";
-      signOut.style.fontSize = "12px";
-      signOut.style.marginLeft = "auto";
-      signOut.addEventListener("click", logout);
-      bar.append(signOut);
-    }
-
-    document.body.prepend(bar);
+    // Dev bar removed completely
+    var oldDevBar = qs("#pv-dev-bar");
+    if (oldDevBar) oldDevBar.remove();
   }
 
   async function loadSession() {
