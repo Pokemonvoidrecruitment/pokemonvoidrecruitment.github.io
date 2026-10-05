@@ -25,15 +25,33 @@
     return helpers.getAuthHeaders ? helpers.getAuthHeaders(extra) : Object.assign({}, extra);
   }
 
+  function apiUrl(path) {
+    if (helpers.apiUrl) return helpers.apiUrl(path);
+    const base = (helpers.apiBase || "").replace(/\/$/, "");
+    const cleanPath = path.startsWith("/") ? path : "/" + path;
+    const token = helpers.getToken ? helpers.getToken() : null;
+    let full = base + cleanPath;
+    if (token) {
+      const sep = full.indexOf("?") === -1 ? "?" : "&";
+      full += sep + "token=" + encodeURIComponent(token);
+    }
+    return full;
+  }
+
+  function apiFetch(path, options = {}) {
+    const url = apiUrl(path);
+    const opts = Object.assign({}, options);
+    opts.credentials = "include";
+    opts.headers = authHeaders(opts.headers || { Accept: "application/json" });
+    return fetch(url, opts);
+  }
+
   let applicantPollInterval = null;
   function pollApplicantInterview() {
     if (applicantPollInterval) return;
     applicantPollInterval = setInterval(async () => {
       try {
-        const r = await fetch((helpers.apiBase || "") + "/api/application/status", {
-          credentials: "include",
-          headers: authHeaders({ Accept: "application/json" })
-        });
+        const r = await apiFetch("/api/application/status");
         if (!r.ok) return;
         const res = await r.json();
         if (res.application && res.application.interview) {
@@ -57,10 +75,7 @@
         return;
       }
       try {
-        const r = await fetch(
-          (helpers.apiBase || "") + "/api/admin/applications/" + encodeURIComponent(appId),
-          { credentials: "include", headers: authHeaders({ Accept: "application/json" }) }
-        );
+        const r = await apiFetch("/api/admin/applications/" + encodeURIComponent(appId));
         if (!r.ok) return;
         const res = await r.json();
         if (res.application && res.application.interview) {
@@ -84,9 +99,8 @@
   }
 
   async function getJson(path) {
-    const response = await fetch((helpers.apiBase || "") + path, {
-      credentials: "include",
-      headers: authHeaders({ Accept: "application/json" }),
+    const response = await apiFetch(path, {
+      headers: { Accept: "application/json" },
     });
     const body = await response.json().catch(() => ({}));
     if (!response.ok) {
@@ -300,10 +314,9 @@
           replyBtn.disabled = true;
           replyBtn.textContent = "Sending…";
           try {
-            const r = await fetch((helpers.apiBase || "") + "/api/interview/message", {
+            const r = await apiFetch("/api/interview/message", {
               method: "POST",
-              credentials: "include",
-              headers: authHeaders({ "Content-Type": "application/json", Accept: "application/json" }),
+              headers: { "Content-Type": "application/json", Accept: "application/json" },
               body: JSON.stringify({ message: body })
             });
             const res = await r.json();
@@ -459,10 +472,8 @@
         delBtn.disabled = true;
         try {
           if (helpers.apiBase) {
-            const r = await fetch((helpers.apiBase || "") + "/api/admin/applications/" + encodeURIComponent(app.id), {
+            const r = await apiFetch("/api/admin/applications/" + encodeURIComponent(app.id), {
               method: "DELETE",
-              credentials: "include",
-              headers: authHeaders({ Accept: "application/json" })
             });
             const data = await r.json();
             if (!r.ok) throw new Error(data.message || "Failed to delete.");
@@ -577,12 +588,11 @@
               if (!body || !selected) return;
               directorSendBtn.disabled = true;
               try {
-                const r = await fetch(
-                  (helpers.apiBase || "") + "/api/admin/applications/" + encodeURIComponent(selected.id) + "/interview/message",
+                const r = await apiFetch(
+                  "/api/admin/applications/" + encodeURIComponent(selected.id) + "/interview/message",
                   {
                     method: "POST",
-                    credentials: "include",
-                    headers: authHeaders({ "Content-Type": "application/json", Accept: "application/json" }),
+                    headers: { "Content-Type": "application/json", Accept: "application/json" },
                     body: JSON.stringify({ message: body }),
                   },
                 );
@@ -679,10 +689,9 @@
         bulkDeleteBtn.disabled = true;
         try {
           if (helpers.apiBase) {
-            const r = await fetch((helpers.apiBase || "") + "/api/admin/applications/bulk-delete", {
+            const r = await apiFetch("/api/admin/applications/bulk-delete", {
               method: "POST",
-              credentials: "include",
-              headers: authHeaders({ "Content-Type": "application/json", Accept: "application/json" }),
+              headers: { "Content-Type": "application/json", Accept: "application/json" },
               body: JSON.stringify({ ids: Array.from(selectedAppIds) }),
             });
             const data = await r.json();
@@ -721,9 +730,9 @@
     claim.addEventListener("click", async () => {
       if (!selected) return;
       try {
-        const r = await fetch(
-          (helpers.apiBase || "") + "/api/admin/applications/" + encodeURIComponent(selected.id) + "/claim",
-          { method: "POST", credentials: "include", headers: authHeaders({ Accept: "application/json" }) },
+        const r = await apiFetch(
+          "/api/admin/applications/" + encodeURIComponent(selected.id) + "/claim",
+          { method: "POST" },
         );
         const data = await r.json();
         if (!r.ok) throw new Error(data.message || "Could not update claim.");
@@ -740,12 +749,11 @@
       if (!selected) return;
       try {
         const status = $("#director-status").value;
-        const r = await fetch(
-          (helpers.apiBase || "") + "/api/admin/applications/" + encodeURIComponent(selected.id) + "/status",
+        const r = await apiFetch(
+          "/api/admin/applications/" + encodeURIComponent(selected.id) + "/status",
           {
             method: "POST",
-            credentials: "include",
-            headers: authHeaders({ "Content-Type": "application/json", Accept: "application/json" }),
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
             body: JSON.stringify({ status }),
           },
         );
@@ -770,9 +778,9 @@
 
         deleteBtn.disabled = true;
         try {
-          const r = await fetch(
-            (helpers.apiBase || "") + "/api/admin/applications/" + encodeURIComponent(selected.id),
-            { method: "DELETE", credentials: "include", headers: authHeaders({ Accept: "application/json" }) }
+          const r = await apiFetch(
+            "/api/admin/applications/" + encodeURIComponent(selected.id),
+            { method: "DELETE" }
           );
           const data = await r.json();
           if (!r.ok) throw new Error(data.message || "Could not delete application.");

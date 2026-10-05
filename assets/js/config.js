@@ -1,4 +1,18 @@
 (function () {
+  // Mobile Cross-Domain Auth: Extract and preserve token immediately before anything else
+  try {
+    var urlParams = new URLSearchParams(window.location.search);
+    var urlToken = urlParams.get("token");
+    if (urlToken && urlToken !== "null" && urlToken !== "undefined") {
+      window.__PV_TOKEN__ = urlToken;
+      try { localStorage.setItem("pv_token", urlToken); } catch (e) {}
+      try { sessionStorage.setItem("pv_token", urlToken); } catch (e) {}
+      try {
+        document.cookie = "pv_token=" + encodeURIComponent(urlToken) + "; path=/; max-age=2592000; SameSite=Lax; Secure";
+      } catch (e) {}
+    }
+  } catch (e) {}
+
   var isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
   window.VOID_RECRUITMENT = {
     apiBaseUrl: isLocal ? "" : "https://pokemonvoidrecruitmentgithubio-production.up.railway.app",

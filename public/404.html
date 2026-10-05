@@ -4,6 +4,14 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Page Not Found · Pokemon Void Recruitment</title>
+    <script>
+      (function () {
+        var path = window.location.pathname;
+        if (!path.endsWith(".html") && !path.endsWith("/")) {
+          window.location.replace(path + ".html" + window.location.search + window.location.hash);
+        }
+      })();
+    </script>
     <link rel="stylesheet" href="assets/css/site.css" />
     <script defer src="assets/js/config.js"></script>
     <script defer src="assets/js/site.js"></script>

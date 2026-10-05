@@ -4,12 +4,53 @@
   var config = window.VOID_RECRUITMENT || {};
   var apiBase = (config.apiBaseUrl || "").replace(/\/$/, "");
 
+  function getStoredToken() {
+    if (window.__PV_TOKEN__ && window.__PV_TOKEN__ !== "null" && window.__PV_TOKEN__ !== "undefined") {
+      return window.__PV_TOKEN__;
+    }
+    var token = null;
+    try { token = localStorage.getItem("pv_token"); } catch (e) {}
+    if (!token || token === "null" || token === "undefined") {
+      try { token = sessionStorage.getItem("pv_token"); } catch (e) {}
+    }
+    if (!token || token === "null" || token === "undefined") {
+      try {
+        var match = document.cookie.match(/(?:^|;\s*)pv_token=([^;]+)/);
+        if (match) token = decodeURIComponent(match[1]);
+      } catch (e) {}
+    }
+    if (token && token !== "null" && token !== "undefined") {
+      window.__PV_TOKEN__ = token;
+      return token;
+    }
+    return null;
+  }
+
+  function saveToken(token) {
+    if (!token || token === "null" || token === "undefined") return;
+    window.__PV_TOKEN__ = token;
+    try { localStorage.setItem("pv_token", token); } catch (e) {}
+    try { sessionStorage.setItem("pv_token", token); } catch (e) {}
+    try {
+      document.cookie = "pv_token=" + encodeURIComponent(token) + "; path=/; max-age=2592000; SameSite=Lax; Secure";
+    } catch (e) {}
+  }
+
+  function clearStoredToken() {
+    window.__PV_TOKEN__ = null;
+    try { localStorage.removeItem("pv_token"); } catch (e) {}
+    try { sessionStorage.removeItem("pv_token"); } catch (e) {}
+    try {
+      document.cookie = "pv_token=; path=/; max-age=0; SameSite=Lax; Secure";
+    } catch (e) {}
+  }
+
   // Mobile Cross-Domain Auth: Extract token from URL if returning from OAuth
   try {
     var urlParams = new URLSearchParams(window.location.search);
     var urlToken = urlParams.get("token");
-    if (urlToken) {
-      localStorage.setItem("pv_token", urlToken);
+    if (urlToken && urlToken !== "null" && urlToken !== "undefined") {
+      saveToken(urlToken);
       urlParams.delete("token");
       var cleanSearch = urlParams.toString();
       var cleanUrl = window.location.pathname + (cleanSearch ? "?" + cleanSearch : "") + window.location.hash;
@@ -17,10 +58,21 @@
     }
   } catch (e) {}
 
+  function apiUrl(path) {
+    var base = (apiBase || "").replace(/\/$/, "");
+    var cleanPath = path.startsWith("/") ? path : "/" + path;
+    var full = base + cleanPath;
+    var token = getStoredToken();
+    if (token) {
+      var sep = full.indexOf("?") === -1 ? "?" : "&";
+      full += sep + "token=" + encodeURIComponent(token);
+    }
+    return full;
+  }
+
   function getAuthHeaders(extraHeaders) {
     var headers = Object.assign({}, extraHeaders || {});
-    var token = null;
-    try { token = localStorage.getItem("pv_token"); } catch (e) {}
+    var token = getStoredToken();
     if (token) {
       headers["Authorization"] = "Bearer " + token;
     }
@@ -63,23 +115,29 @@
 
   function loginUrl(returnTo) {
     var path = config.discordLoginPath || "/auth/discord";
+    var dest = returnTo || window.location.href;
+    try {
+      var u = new URL(dest, window.location.origin);
+      u.searchParams.delete("token");
+      dest = u.toString();
+    } catch (e) {}
     return (
       (apiBase || "") +
       path +
       "?returnTo=" +
-      encodeURIComponent(returnTo || window.location.href)
+      encodeURIComponent(dest)
     );
   }
 
   async function logout() {
     try {
-      await fetch((apiBase || "") + "/auth/logout", {
+      await fetch(apiUrl("/auth/logout"), {
         method: "POST",
         credentials: "include",
         headers: getAuthHeaders({ Accept: "application/json" })
       });
     } catch {}
-    try { localStorage.removeItem("pv_token"); } catch (e) {}
+    clearStoredToken();
     window.location.reload();
   }
 
@@ -224,13 +282,13 @@
 
   async function loadSession() {
     try {
-      var response = await fetch((apiBase || "") + "/api/session", {
+      var response = await fetch(apiUrl("/api/session"), {
         credentials: "include",
         headers: getAuthHeaders({ Accept: "application/json" }),
       });
       if (!response.ok) {
         if (response.status === 401) {
-          try { localStorage.removeItem("pv_token"); } catch (e) {}
+          clearStoredToken();
         }
         updateAccountUi(null);
         return null;
@@ -246,6 +304,10 @@
 
   window.VoidRecruitment = {
     apiBase: apiBase,
+    apiUrl: apiUrl,
+    getToken: getStoredToken,
+    saveToken: saveToken,
+    clearToken: clearStoredToken,
     loginUrl: loginUrl,
     logout: logout,
     loadSession: loadSession,

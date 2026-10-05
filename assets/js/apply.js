@@ -447,7 +447,8 @@
     button.textContent = "Submitting…";
     message.hidden = true;
     try {
-      const response = await fetch(helpers.apiBase + "/api/application", {
+      const url = helpers.apiUrl ? helpers.apiUrl("/api/application") : (helpers.apiBase + "/api/application");
+      const response = await fetch(url, {
         method: "POST",
         credentials: "include",
         headers: helpers.getAuthHeaders

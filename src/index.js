@@ -18,13 +18,25 @@ app.set("trust proxy", 1);
 const allowedOrigins = new Set([
   config.frontendOrigin,
   config.frontendOrigin ? config.frontendOrigin.replace(/\/$/, "") : null,
+  config.publicBaseUrl,
+  config.publicBaseUrl ? config.publicBaseUrl.replace(/\/$/, "") : null,
   "https://pokemonvoidrecruitment.github.io",
+  "https://pokemonvoidrecruitmentgithubio-production.up.railway.app",
   "http://localhost:3000"
 ].filter(Boolean));
 
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.has(origin) || allowedOrigins.has(origin.replace(/\/$/, "")) || config.isDev) {
+    if (!origin) return callback(null, true);
+    const cleanOrigin = origin.replace(/\/$/, "");
+    if (
+      allowedOrigins.has(cleanOrigin) ||
+      cleanOrigin.endsWith("github.io") ||
+      cleanOrigin.endsWith("railway.app") ||
+      cleanOrigin.includes("localhost") ||
+      cleanOrigin.includes("127.0.0.1") ||
+      config.isDev
+    ) {
       callback(null, true);
     } else {
       callback(null, false);
@@ -125,8 +137,15 @@ function setSession(res, user) {
 
 function currentUser(req) {
   const authHeader = req.get("authorization") || "";
-  const bearerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
-  const token = bearerToken || req.cookies[config.cookieName];
+  const rawBearer = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
+  const bearerToken = (rawBearer && rawBearer !== "null" && rawBearer !== "undefined") ? rawBearer : null;
+  const rawQuery = typeof req.query?.token === "string" ? req.query.token.trim() : null;
+  const queryToken = (rawQuery && rawQuery !== "null" && rawQuery !== "undefined") ? rawQuery : null;
+  const rawBody = typeof req.body?.token === "string" ? req.body.token.trim() : null;
+  const bodyToken = (rawBody && rawBody !== "null" && rawBody !== "undefined") ? rawBody : null;
+  const cookieToken = req.cookies?.[config.cookieName];
+
+  const token = bearerToken || queryToken || bodyToken || cookieToken;
   if (!token) return null;
   const row = statements.session.get(sha256(token));
   if (!row || Date.parse(row.expires_at) < Date.now()) return null;
@@ -264,6 +283,10 @@ app.get("/auth/discord/callback", async (req, res) => {
     } catch {
       targetUrl = new URL(config.frontendOrigin || "https://pokemonvoidrecruitment.github.io");
     }
+    // If targetUrl points to a github.io page without an extension (e.g. /status, /apply, /admin), ensure .html is preserved so GitHub Pages doesn't 404
+    if (targetUrl.hostname.includes("github.io") && !targetUrl.pathname.endsWith(".html") && !targetUrl.pathname.endsWith("/")) {
+      targetUrl.pathname = targetUrl.pathname + ".html";
+    }
     targetUrl.searchParams.set("token", sessionToken);
     res.redirect(targetUrl.toString());
   } catch (e) {
@@ -274,8 +297,13 @@ app.get("/auth/discord/callback", async (req, res) => {
 
 app.post("/auth/logout", (req, res) => {
   const authHeader = req.get("authorization") || "";
-  const bearerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
-  const token = bearerToken || req.cookies[config.cookieName];
+  const rawBearer = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
+  const bearerToken = (rawBearer && rawBearer !== "null" && rawBearer !== "undefined") ? rawBearer : null;
+  const rawQuery = typeof req.query?.token === "string" ? req.query.token.trim() : null;
+  const queryToken = (rawQuery && rawQuery !== "null" && rawQuery !== "undefined") ? rawQuery : null;
+  const rawBody = typeof req.body?.token === "string" ? req.body.token.trim() : null;
+  const bodyToken = (rawBody && rawBody !== "null" && rawBody !== "undefined") ? rawBody : null;
+  const token = bearerToken || queryToken || bodyToken || req.cookies?.[config.cookieName];
   if (token) statements.deleteSession.run(sha256(token));
   res.clearCookie(config.cookieName, { path: "/" });
   res.json({ ok: true });
