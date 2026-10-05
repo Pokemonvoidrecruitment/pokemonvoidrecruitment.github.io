@@ -58,6 +58,33 @@
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
   }
 
+  function escapeHtml(str) {
+    if (str == null) return "";
+    return String(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function sanitizeUrl(rawUrl) {
+    if (!rawUrl || typeof rawUrl !== "string") return "";
+    try {
+      const parsed = new URL(rawUrl, window.location.href);
+      if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+        if (parsed.pathname.startsWith("/uploads/")) {
+          const token = helpers.getToken ? helpers.getToken() : null;
+          if (token && !parsed.searchParams.has("token")) {
+            parsed.searchParams.set("token", token);
+          }
+        }
+        return parsed.toString();
+      }
+    } catch {}
+    return "";
+  }
+
   function getFileIcon(name) {
     const ext = (name || "").split(".").pop().toLowerCase();
     if (["aseprite", "ase"].includes(ext)) return "🎨";
@@ -308,36 +335,41 @@
         trailingPunct = matchPunct[0];
         url = url.slice(0, -trailingPunct.length);
       }
-      const c = classifyUrl(url);
+      const safeUrl = sanitizeUrl(url);
+      if (!safeUrl) return trailingPunct;
+
+      const c = classifyUrl(safeUrl);
+      const attrUrl = escapeHtml(safeUrl);
+
       if (c.isImg) {
         attachmentNodes.push(
-          `<a href="${url}" target="_blank" rel="noopener noreferrer" style="display:inline-block; margin-top:8px; margin-right:8px;"><img class="ticket-media-img" src="${url}" loading="lazy" alt="Image" style="max-width: 100%; max-height: 400px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); display: block;" onerror="this.onerror=null;this.style.display='none';"></a>`
+          `<a href="${attrUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-block; margin-top:8px; margin-right:8px;"><img class="ticket-media-img" src="${attrUrl}" loading="lazy" alt="Image" style="max-width: 100%; max-height: 400px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); display: block;" onerror="this.onerror=null;this.style.display='none';"></a>`
         );
         return "";
       }
       if (c.isVideo) {
         attachmentNodes.push(
-          `<div style="margin-top:8px;"><video class="ticket-media-video" controls playsinline src="${url}" preload="metadata" style="max-width: 100%; max-height: 400px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); display: block;"></video></div>`
+          `<div style="margin-top:8px;"><video class="ticket-media-video" controls playsinline src="${attrUrl}" preload="metadata" style="max-width: 100%; max-height: 400px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); display: block;"></video></div>`
         );
         return "";
       }
       if (c.isAudio) {
-        const name = getFileName(url);
+        const name = escapeHtml(getFileName(safeUrl));
         attachmentNodes.push(
           `<div class="ticket-file-card ticket-audio-card" style="margin-top:8px; padding:12px 14px; background:rgba(15, 23, 42, 0.75); border:1px solid #38bdf8; border-radius:10px; display:flex; flex-direction:column; gap:8px; max-width:480px;">` +
             `<div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">` +
               `<span style="font-size:13px; font-weight:600; color:#38bdf8; display:flex; align-items:center; gap:6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">` +
                 `🎵 <span title="${name}">${name}</span>` +
               `</span>` +
-              `<a href="${url}" download="${name}" target="_blank" rel="noopener noreferrer" class="button ghost" style="padding:3px 10px; font-size:11px; text-decoration:none; white-space:nowrap; border-color:#38bdf8; color:#e0f2fe;">Download ⬇</a>` +
+              `<a href="${attrUrl}" download="${name}" target="_blank" rel="noopener noreferrer" class="button ghost" style="padding:3px 10px; font-size:11px; text-decoration:none; white-space:nowrap; border-color:#38bdf8; color:#e0f2fe;">Download ⬇</a>` +
             `</div>` +
-            `<audio controls preload="metadata" src="${url}" style="width:100%; height:36px; outline:none; border-radius:4px;"></audio>` +
+            `<audio controls preload="metadata" src="${attrUrl}" style="width:100%; height:36px; outline:none; border-radius:4px;"></audio>` +
           `</div>`
         );
         return "";
       }
       if (c.isAseprite) {
-        const name = getFileName(url);
+        const name = escapeHtml(getFileName(safeUrl));
         attachmentNodes.push(
           `<div class="ticket-file-card ticket-aseprite-card" style="margin-top:8px; padding:12px 14px; background:rgba(30, 27, 75, 0.65); border:1px solid #818cf8; border-radius:10px; display:flex; align-items:center; justify-content:space-between; gap:12px; max-width:480px;">` +
             `<div style="display:flex; align-items:center; gap:10px; min-width:0;">` +
@@ -347,13 +379,13 @@
                 `<div style="font-size:11px; color:#a5b4fc;">Aseprite Sprite File · Spriter Asset</div>` +
               `</div>` +
             `</div>` +
-            `<a href="${url}" download="${name}" target="_blank" rel="noopener noreferrer" class="button primary" style="padding:4px 12px; font-size:12px; text-decoration:none; white-space:nowrap; background:#6366f1; border-color:#6366f1; color:#fff;">Download ⬇</a>` +
+            `<a href="${attrUrl}" download="${name}" target="_blank" rel="noopener noreferrer" class="button primary" style="padding:4px 12px; font-size:12px; text-decoration:none; white-space:nowrap; background:#6366f1; border-color:#6366f1; color:#fff;">Download ⬇</a>` +
           `</div>`
         );
         return "";
       }
       if (c.isRxdata) {
-        const name = getFileName(url);
+        const name = escapeHtml(getFileName(safeUrl));
         attachmentNodes.push(
           `<div class="ticket-file-card ticket-rxdata-card" style="margin-top:8px; padding:12px 14px; background:rgba(19, 78, 74, 0.6); border:1px solid #2dd4bf; border-radius:10px; display:flex; align-items:center; justify-content:space-between; gap:12px; max-width:480px;">` +
             `<div style="display:flex; align-items:center; gap:10px; min-width:0;">` +
@@ -363,13 +395,13 @@
                 `<div style="font-size:11px; color:#5eead4;">RPG Maker XP / Essentials Map File (.rxdata)</div>` +
               `</div>` +
             `</div>` +
-            `<a href="${url}" download="${name}" target="_blank" rel="noopener noreferrer" class="button primary" style="padding:4px 12px; font-size:12px; text-decoration:none; white-space:nowrap; background:#0d9488; border-color:#0d9488; color:#fff;">Download ⬇</a>` +
+            `<a href="${attrUrl}" download="${name}" target="_blank" rel="noopener noreferrer" class="button primary" style="padding:4px 12px; font-size:12px; text-decoration:none; white-space:nowrap; background:#0d9488; border-color:#0d9488; color:#fff;">Download ⬇</a>` +
           `</div>`
         );
         return "";
       }
       if (c.isDat) {
-        const name = getFileName(url);
+        const name = escapeHtml(getFileName(safeUrl));
         attachmentNodes.push(
           `<div class="ticket-file-card ticket-dat-card" style="margin-top:8px; padding:12px 14px; background:rgba(120, 53, 15, 0.5); border:1px solid #f59e0b; border-radius:10px; display:flex; align-items:center; justify-content:space-between; gap:12px; max-width:480px;">` +
             `<div style="display:flex; align-items:center; gap:10px; min-width:0;">` +
@@ -379,13 +411,13 @@
                 `<div style="font-size:11px; color:#fcd34d;">Animation / Move Data (.dat) · Move Animators</div>` +
               `</div>` +
             `</div>` +
-            `<a href="${url}" download="${name}" target="_blank" rel="noopener noreferrer" class="button primary" style="padding:4px 12px; font-size:12px; text-decoration:none; white-space:nowrap; background:#d97706; border-color:#d97706; color:#fff;">Download ⬇</a>` +
+            `<a href="${attrUrl}" download="${name}" target="_blank" rel="noopener noreferrer" class="button primary" style="padding:4px 12px; font-size:12px; text-decoration:none; white-space:nowrap; background:#d97706; border-color:#d97706; color:#fff;">Download ⬇</a>` +
           `</div>`
         );
         return "";
       }
       if (c.isArchive) {
-        const name = getFileName(url);
+        const name = escapeHtml(getFileName(safeUrl));
         attachmentNodes.push(
           `<div class="ticket-file-card ticket-archive-card" style="margin-top:8px; padding:12px 14px; background:rgba(30, 41, 59, 0.65); border:1px solid #64748b; border-radius:10px; display:flex; align-items:center; justify-content:space-between; gap:12px; max-width:480px;">` +
             `<div style="display:flex; align-items:center; gap:10px; min-width:0;">` +
@@ -395,31 +427,39 @@
                 `<div style="font-size:11px; color:#94a3b8;">Asset Archive / Project Document</div>` +
               `</div>` +
             `</div>` +
-            `<a href="${url}" download="${name}" target="_blank" rel="noopener noreferrer" class="button ghost" style="padding:4px 12px; font-size:12px; text-decoration:none; white-space:nowrap; border-color:#64748b; color:#f1f5f9;">Download ⬇</a>` +
+            `<a href="${attrUrl}" download="${name}" target="_blank" rel="noopener noreferrer" class="button ghost" style="padding:4px 12px; font-size:12px; text-decoration:none; white-space:nowrap; border-color:#64748b; color:#f1f5f9;">Download ⬇</a>` +
           `</div>`
         );
         return "";
       }
       // Non-media URL: protect with placeholder
-      return `###URL_TOKEN:${encodeURIComponent(url)}###` + trailingPunct;
+      return `###URL_TOKEN:${encodeURIComponent(safeUrl)}###` + trailingPunct;
     });
 
     // 2. Escape HTML
     let safe = stripped
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
 
     // 3. Restore non-media URLs as clickable links
     safe = safe.replace(/###URL_TOKEN:(.*?)###/g, (_, encoded) => {
-      const url = decodeURIComponent(encoded);
-      return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="ticket-link" style="color: #38bdf8; text-decoration: underline; word-break: break-all;">${url}</a>`;
+      const origUrl = decodeURIComponent(encoded);
+      const safeLink = sanitizeUrl(origUrl);
+      if (!safeLink) return escapeHtml(origUrl);
+      const escapedHref = escapeHtml(safeLink);
+      const displayText = escapeHtml(origUrl);
+      return `<a href="${escapedHref}" target="_blank" rel="noopener noreferrer" class="ticket-link" style="color: #38bdf8; text-decoration: underline; word-break: break-all;">${displayText}</a>`;
     });
 
     // 4. Replace Discord custom emojis: <:name:id> or <a:name:id>
     safe = safe.replace(/&lt;(a)?:([a-zA-Z0-9_]+):([0-9]+)&gt;/g, (match, anim, name, id) => {
       const ext = anim ? "gif" : "png";
-      return `<img class="discord-emoji" src="https://cdn.discordapp.com/emojis/${id}.${ext}?size=48" alt=":${name}:" title=":${name}:" loading="lazy" style="width: 1.45em; height: 1.45em; vertical-align: -0.3em; display: inline-block; object-fit: contain;">`;
+      const safeName = escapeHtml(name);
+      const safeId = encodeURIComponent(id);
+      return `<img class="discord-emoji" src="https://cdn.discordapp.com/emojis/${safeId}.${ext}?size=48" alt=":${safeName}:" title=":${safeName}:" loading="lazy" style="width: 1.45em; height: 1.45em; vertical-align: -0.3em; display: inline-block; object-fit: contain;">`;
     });
 
     safe = safe.trim().replace(/\n/g, "<br>");
@@ -1114,7 +1154,7 @@
         const name = session.user.globalName || session.user.username;
         const copyNode = $("#admin-locked-copy");
         if (copyNode) {
-          copyNode.innerHTML = `Signed in as <strong>${name}</strong>, but this Discord account does not have the Recruitment Director role in the server. Only authorized staff can view the application desk.`;
+          copyNode.innerHTML = `Signed in as <strong>${escapeHtml(name)}</strong>, but this Discord account does not have the Recruitment Director role in the server. Only authorized staff can view the application desk.`;
         }
         const loginBtn = $("#admin-login-btn");
         if (loginBtn) loginBtn.hidden = true;
@@ -1165,7 +1205,7 @@
           const name = session?.user?.globalName || session?.user?.username || "this account";
           const copyNode = $("#admin-locked-copy");
           if (copyNode) {
-            copyNode.innerHTML = `Signed in as <strong>${name}</strong>, but this Discord account does not have the Recruitment Director role in the server.`;
+            copyNode.innerHTML = `Signed in as <strong>${escapeHtml(name)}</strong>, but this Discord account does not have the Recruitment Director role in the server.`;
           }
           const loginBtn = $("#admin-login-btn");
           if (loginBtn) loginBtn.hidden = true;

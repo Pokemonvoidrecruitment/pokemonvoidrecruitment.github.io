@@ -16,6 +16,10 @@ console.log(`[config] OAuth Redirect URI: ${defaultRedirectUri}`);
 
 const isProduction = process.env.NODE_ENV === "production" || Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_PUBLIC_DOMAIN || process.env.RENDER);
 
+import crypto from "node:crypto";
+
+const defaultInternalSecret = isProduction ? crypto.randomBytes(32).toString("hex") : "dev-internal-secret";
+
 export const config = {
   port: Number(process.env.PORT || 3000),
   isDev: !isProduction,
@@ -39,7 +43,7 @@ export const config = {
     ]),
     applicantDMs: process.env.APPLICANT_DMS !== "false"
   },
-  internalEventSecret: clean(process.env.INTERNAL_EVENT_SECRET || "dev-internal-secret"),
+  internalEventSecret: clean(process.env.INTERNAL_EVENT_SECRET || defaultInternalSecret),
   dbPath: clean(
     process.env.DB_PATH ||
     (process.env.RAILWAY_VOLUME_MOUNT_PATH ? `${process.env.RAILWAY_VOLUME_MOUNT_PATH}/recruitment.sqlite` : "./data/recruitment.sqlite")

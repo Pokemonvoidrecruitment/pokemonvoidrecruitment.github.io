@@ -16,6 +16,49 @@ import fs from "node:fs";
 const app = express();
 app.set("trust proxy", 1);
 
+// HTTP Security Headers
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "SAMEORIGIN");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("X-XSS-Protection", "1; mode=block");
+  next();
+});
+
+// Sliding-window rate limiter
+function createRateLimiter({ windowMs, max, message }) {
+  const hits = new Map();
+
+  setInterval(() => {
+    const now = Date.now();
+    for (const [key, record] of hits.entries()) {
+      if (record.resetTime <= now) hits.delete(key);
+    }
+  }, 300000);
+
+  return (req, res, next) => {
+    const key = req.ip || req.headers["x-forwarded-for"] || "global";
+    const now = Date.now();
+    let record = hits.get(key);
+    if (!record || record.resetTime <= now) {
+      record = { count: 1, resetTime: now + windowMs };
+      hits.set(key, record);
+      return next();
+    }
+    record.count++;
+    if (record.count > max) {
+      return res.status(429).json({
+        message: message || "Too many requests. Please slow down and try again later."
+      });
+    }
+    next();
+  };
+}
+
+const authLimiter = createRateLimiter({ windowMs: 60000, max: 20, message: "Too many sign-in attempts. Please try again in a minute." });
+const applicationLimiter = createRateLimiter({ windowMs: 900000, max: 5, message: "Too many application submissions. Please wait before submitting again." });
+const messageLimiter = createRateLimiter({ windowMs: 60000, max: 30, message: "You are sending messages too quickly. Please wait a moment." });
+
 // CORS configuration
 const allowedOrigins = new Set([
   config.frontendOrigin,
@@ -33,11 +76,9 @@ app.use(cors({
     const cleanOrigin = origin.replace(/\/$/, "");
     if (
       allowedOrigins.has(cleanOrigin) ||
-      cleanOrigin.endsWith("github.io") ||
-      cleanOrigin.endsWith("railway.app") ||
-      cleanOrigin.includes("localhost") ||
-      cleanOrigin.includes("127.0.0.1") ||
-      config.isDev
+      cleanOrigin === "https://pokemonvoidrecruitment.github.io" ||
+      (cleanOrigin.endsWith(".railway.app") && cleanOrigin.includes("pokemonvoidrecruitment")) ||
+      (config.isDev && (cleanOrigin.includes("localhost") || cleanOrigin.includes("127.0.0.1")))
     ) {
       callback(null, true);
     } else {
@@ -105,17 +146,72 @@ const upload = multer({
   storage,
   limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
   fileFilter: (_req, file, cb) => {
-    const allowed = /\.(aseprite|ase|mp3|wav|ogg|flac|m4a|aac|opus|mid|midi|rxdata|dat|png|jpe?g|gif|webp|bmp|svg|mp4|webm|mov|zip|rar|7z|tar|gz|rb|txt|json|pdf)$/i;
+    // Note: SVG excluded to prevent Stored XSS
+    const allowed = /\.(aseprite|ase|mp3|wav|ogg|flac|m4a|aac|opus|mid|midi|rxdata|dat|png|jpe?g|gif|webp|bmp|mp4|webm|mov|zip|rar|7z|tar|gz|rb|txt|json|pdf)$/i;
     if (allowed.test(file.originalname)) {
       cb(null, true);
     } else {
-      cb(new Error(`File type not supported (${path.extname(file.originalname)}). Supported: Aseprite (.aseprite/.ase), Audio (.mp3/.wav/.ogg/.flac), .rxdata, .dat, images, video, zip.`));
+      cb(new Error(`File type not supported (${path.extname(file.originalname)}). Supported: Aseprite (.aseprite/.ase), Audio (.mp3/.wav/.ogg/.flac), .rxdata, .dat, images (.png/.gif/.webp), video, zip.`));
     }
   }
 });
 
-// Serve uploaded interview files
-app.use("/uploads", express.static(uploadsDir, { maxAge: "7d", dotfiles: "deny" }));
+// Protected interview uploads: require signed in session (Directors or Applicants)
+app.get("/uploads/:filename", (req, res) => {
+  const user = currentUser(req);
+  if (!user) {
+    return res.status(401).send("Discord sign-in required to view recruitment attachments.");
+  }
+  const filename = path.basename(req.params.filename);
+  const filePath = path.join(uploadsDir, filename);
+
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).send("File not found.");
+  }
+
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Content-Security-Policy", "default-src 'none'; sandbox");
+  res.setHeader("X-Frame-Options", "DENY");
+
+  res.sendFile(filePath);
+});
+
+function safeRedirectUrl(returnTo) {
+  const trustedOrigins = new Set([
+    config.frontendOrigin,
+    config.frontendOrigin ? config.frontendOrigin.replace(/\/$/, "") : null,
+    config.publicBaseUrl,
+    config.publicBaseUrl ? config.publicBaseUrl.replace(/\/$/, "") : null,
+    "https://pokemonvoidrecruitment.github.io",
+    "https://pokemonvoidrecruitmentgithubio-production.up.railway.app",
+    "http://localhost:3000"
+  ].filter(Boolean));
+
+  let targetUrl;
+  try {
+    targetUrl = new URL(returnTo, config.frontendOrigin || "https://pokemonvoidrecruitment.github.io");
+  } catch {
+    targetUrl = new URL(config.frontendOrigin || "https://pokemonvoidrecruitment.github.io");
+  }
+
+  const cleanTargetOrigin = targetUrl.origin.replace(/\/$/, "");
+  const isTrusted = (
+    trustedOrigins.has(cleanTargetOrigin) ||
+    targetUrl.hostname === "pokemonvoidrecruitment.github.io" ||
+    (targetUrl.hostname.endsWith(".railway.app") && targetUrl.hostname.includes("pokemonvoidrecruitment")) ||
+    (config.isDev && (cleanTargetOrigin.includes("localhost") || cleanTargetOrigin.includes("127.0.0.1")))
+  );
+
+  if (!isTrusted) {
+    targetUrl = new URL(config.frontendOrigin || "https://pokemonvoidrecruitment.github.io");
+  }
+
+  if (targetUrl.hostname.includes("github.io") && !targetUrl.pathname.endsWith(".html") && !targetUrl.pathname.endsWith("/")) {
+    targetUrl.pathname = targetUrl.pathname + ".html";
+  }
+
+  return targetUrl;
+}
 
 async function discordToken(code) {
   const credentials = Buffer.from(`${config.discord.clientId}:${config.discord.clientSecret}`).toString("base64");
@@ -265,7 +361,7 @@ if (config.isProduction || !config.isDev || process.env.ENABLE_DEV_LOGIN !== "tr
   app.use("/auth/dev", (req, res) => res.redirect("/"));
 }
 
-app.get("/auth/discord", (req, res) => {
+app.get("/auth/discord", authLimiter, (req, res) => {
   if (!config.discord.clientId || !config.discord.clientSecret) {
     if (config.isDev) {
       const returnTo = req.query.returnTo || "/status.html";
@@ -274,10 +370,10 @@ app.get("/auth/discord", (req, res) => {
     return res.status(503).send("Discord OAuth is not configured on this server.");
   }
 
-  const returnTo = req.query.returnTo || config.frontendOrigin || "/";
+  const validatedReturnTo = safeRedirectUrl(req.query.returnTo || config.frontendOrigin || "/").toString();
   const stateObj = {
     nonce: randomToken(16),
-    returnTo,
+    returnTo: validatedReturnTo,
     time: Date.now()
   };
   const payload = Buffer.from(JSON.stringify(stateObj)).toString("base64url");
@@ -315,16 +411,7 @@ app.get("/auth/discord/callback", async (req, res) => {
     const user = await discordUser(token.access_token);
     const sessionToken = setSession(res, user);
 
-    let targetUrl;
-    try {
-      targetUrl = new URL(returnTo, config.frontendOrigin || "https://pokemonvoidrecruitment.github.io");
-    } catch {
-      targetUrl = new URL(config.frontendOrigin || "https://pokemonvoidrecruitment.github.io");
-    }
-    // If targetUrl points to a github.io page without an extension (e.g. /status, /apply, /admin), ensure .html is preserved so GitHub Pages doesn't 404
-    if (targetUrl.hostname.includes("github.io") && !targetUrl.pathname.endsWith(".html") && !targetUrl.pathname.endsWith("/")) {
-      targetUrl.pathname = targetUrl.pathname + ".html";
-    }
+    const targetUrl = safeRedirectUrl(returnTo);
     targetUrl.searchParams.set("token", sessionToken);
     res.redirect(targetUrl.toString());
   } catch (e) {
@@ -369,7 +456,7 @@ app.get("/api/session", async (req, res) => {
   });
 });
 
-app.post("/api/application", requireUser, (req, res) => {
+app.post("/api/application", applicationLimiter, requireUser, (req, res) => {
   const body = req.body || {};
   const validRoles = ["programmer", "move-animator", "spriter", "music"];
   const roles = (Array.isArray(body.roles) ? body.roles : []).filter(r => validRoles.includes(r));
@@ -456,7 +543,7 @@ app.get("/api/interview", requireUser, (req, res) => {
 });
 
 // Applicant posts a message or file to their interview ticket
-app.post("/api/interview/message", requireUser, (req, res, next) => {
+app.post("/api/interview/message", messageLimiter, requireUser, (req, res, next) => {
   upload.array("files", 5)(req, res, (err) => {
     if (err) return res.status(400).json({ message: err.message });
     next();
@@ -633,7 +720,7 @@ app.post("/api/admin/applications/bulk-delete", requireDirector, (req, res) => {
 });
 
 // Director posts a message to an applicant's interview ticket
-app.post("/api/admin/applications/:id/interview/message", requireDirector, (req, res, next) => {
+app.post("/api/admin/applications/:id/interview/message", messageLimiter, requireDirector, (req, res, next) => {
   upload.array("files", 5)(req, res, (err) => {
     if (err) return res.status(400).json({ message: err.message });
     next();

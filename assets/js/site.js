@@ -249,8 +249,15 @@
         userBadge.style.display = "inline-flex";
         userBadge.style.alignItems = "center";
         userBadge.style.gap = "6px";
-        var dotColor = session.user.isDirector ? "#ffd700" : "#22c55e";
-        userBadge.innerHTML = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + dotColor + ';"></span> ' + (session.user.globalName || session.user.username);
+        var dot = document.createElement("span");
+        dot.style.display = "inline-block";
+        dot.style.width = "8px";
+        dot.style.height = "8px";
+        dot.style.borderRadius = "50%";
+        dot.style.background = dotColor;
+        var nameSpan = document.createElement("span");
+        nameSpan.textContent = session.user.globalName || session.user.username;
+        userBadge.append(dot, nameSpan);
 
         var signOutBtn = document.createElement("button");
         signOutBtn.type = "button";
