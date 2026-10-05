@@ -1,7 +1,86 @@
-import { Client, GatewayIntentBits, EmbedBuilder } from "discord.js";
+import { Client, GatewayIntentBits, Partials, EmbedBuilder } from "discord.js";
 import { config } from "./config.js";
+import { statements } from "./db.js";
 
-export let discord = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers] });
+export let discord = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.DirectMessages
+  ],
+  partials: [Partials.Channel, Partials.Message]
+});
+
+function setupMessageListener(client) {
+  client.on("messageCreate", async (message) => {
+    // Only handle DMs from real users (ignore bots and guild channels)
+    if (message.author.bot || message.guild) return;
+
+    const userId = message.author.id;
+    const app = statements.activeByDiscord.get(userId);
+
+    if (!app) {
+      await message.reply({
+        content: "👋 Hello! You do not currently have an active application with Pokémon Void recruitment.\nIf you would like to apply, please submit an application here: https://pokemonvoidrecruitment.github.io/apply"
+      }).catch(() => {});
+      return;
+    }
+
+    if (app.status !== "Interview") {
+      await message.reply({
+        content: `Your application (**${app.id}**) is currently in the **${app.status}** stage.\nWhen our directors invite you to an interview, you can chat with them directly right here in DMs!\nStatus Portal: https://pokemonvoidrecruitment.github.io/status`
+      }).catch(() => {});
+      return;
+    }
+
+    // Interview stage is active: save message to interview ticket
+    let ticket = statements.interview.get(app.id);
+    const now = new Date();
+    if (!ticket) {
+      statements.saveInterview.run(app.id, "Interview", "[]", now.toISOString());
+      ticket = statements.interview.get(app.id);
+    }
+
+    let text = (message.content || "").trim();
+    if (message.attachments && message.attachments.size > 0) {
+      const urls = Array.from(message.attachments.values()).map(a => a.url).join("\n");
+      text = text ? `${text}\n${urls}` : urls;
+    }
+
+    if (!text) return;
+
+    let messages = [];
+    try { messages = JSON.parse(ticket.messages_json || "[]"); } catch {}
+
+    const entry = {
+      senderLabel: message.author.globalName || message.author.username || app.display_name,
+      senderType: "applicant",
+      sentAt: now.toLocaleString(),
+      timestamp: now.toISOString(),
+      body: text
+    };
+    messages.push(entry);
+
+    const updatedNow = now.toISOString();
+    statements.saveInterview.run(app.id, ticket.status, JSON.stringify(messages), updatedNow);
+
+    // React with a checkmark so applicant knows their message reached the Director Desk
+    await message.react("✅").catch(() => {});
+
+    // Notify Directors in their Discord channel
+    notifyDirectors({
+      event: "NEW_INTERVIEW_MESSAGE",
+      applicationId: app.id,
+      displayName: message.author.globalName || message.author.username || app.display_name,
+      status: "Interview",
+      preview: text
+    }).catch(console.error);
+
+    console.log(`[discord] Received DM from ${message.author.tag} (${userId}) for ${app.id} -> Saved to interview ticket`);
+  });
+}
+
+setupMessageListener(discord);
 
 export async function startDiscord(){
   if(!config.discord.botToken) {
@@ -10,15 +89,19 @@ export async function startDiscord(){
   }
   try {
     await discord.login(config.discord.botToken);
-    console.log(`[discord] Connected as ${discord.user?.tag} (with GuildMembers intent)`);
+    console.log(`[discord] Connected as ${discord.user?.tag} (with DirectMessages intent)`);
   } catch (err) {
     if (err.message && err.message.toLowerCase().includes("disallowed intent")) {
-      console.warn("[discord] GuildMembers privileged intent is not enabled in Developer Portal. Retrying with basic Guilds intent...");
+      console.warn("[discord] Privileged intent not enabled. Retrying with basic Guilds & DirectMessages intent...");
       try {
         discord.destroy();
-        discord = new Client({ intents: [GatewayIntentBits.Guilds] });
+        discord = new Client({
+          intents: [GatewayIntentBits.Guilds, GatewayIntentBits.DirectMessages],
+          partials: [Partials.Channel, Partials.Message]
+        });
+        setupMessageListener(discord);
         await discord.login(config.discord.botToken);
-        console.log(`[discord] Connected as ${discord.user?.tag} (Guilds intent active)`);
+        console.log(`[discord] Connected as ${discord.user?.tag} (DirectMessages active)`);
       } catch (err2) {
         console.warn(`[discord] Bot fallback login failed: ${err2.message}`);
       }
@@ -75,7 +158,7 @@ function getEmbedColor(status, event) {
   return 0x5865f2; // Default Discord Blurple
 }
 
-export async function notifyDirectors({event,applicationId,displayName,roles,status}){
+export async function notifyDirectors({event,applicationId,displayName,roles,status,preview}){
   if(!discord.isReady() || !config.discord.directorChannelId) return;
 
   // Suppress automated notifications for test runners and dev accounts
@@ -102,7 +185,8 @@ export async function notifyDirectors({event,applicationId,displayName,roles,sta
       {name:"Application",value:applicationId || "—",inline:true},
       {name:"Applicant",value:displayName || "Applicant",inline:true},
       {name:"Roles",value:(roles||[]).join(", ") || "—",inline:true},
-      ...(status ? [{name:"Status",value:status,inline:true}] : [])
+      ...(status ? [{name:"Status",value:status,inline:true}] : []),
+      ...(preview ? [{name:"Message Preview",value:preview.length > 500 ? preview.slice(0, 497) + "..." : preview, inline: false}] : [])
     );
 
     const portalUrl = `${(config.frontendOrigin || "https://pokemonvoidrecruitment.github.io").replace(/\/$/, "")}/admin`;

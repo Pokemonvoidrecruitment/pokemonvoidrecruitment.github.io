@@ -21,6 +21,56 @@
     (roles || []).map((role) => roleNames[role] || role).join(", ");
   const page = document.body.dataset.portalPage;
 
+  let applicantPollInterval = null;
+  function pollApplicantInterview() {
+    if (applicantPollInterval) return;
+    applicantPollInterval = setInterval(async () => {
+      try {
+        const r = await fetch((helpers.apiBase || "") + "/api/application/status", {
+          credentials: "include",
+          headers: { Accept: "application/json" }
+        });
+        if (!r.ok) return;
+        const res = await r.json();
+        if (res.application && res.application.interview) {
+          const log = $("#ticket-log");
+          const currentCount = log ? log.querySelectorAll(".ticket-entry").length : 0;
+          const newCount = (res.application.interview.messages || []).length;
+          if (newCount !== currentCount) {
+            renderTicket(res.application.interview, false);
+          }
+        }
+      } catch {}
+    }, 3500);
+  }
+
+  let directorPollInterval = null;
+  function pollDirectorInterview(appId) {
+    if (directorPollInterval) clearInterval(directorPollInterval);
+    directorPollInterval = setInterval(async () => {
+      if (!selected || selected.id !== appId) {
+        clearInterval(directorPollInterval);
+        return;
+      }
+      try {
+        const r = await fetch(
+          (helpers.apiBase || "") + "/api/admin/applications/" + encodeURIComponent(appId),
+          { credentials: "include", headers: { Accept: "application/json" } }
+        );
+        if (!r.ok) return;
+        const res = await r.json();
+        if (res.application && res.application.interview) {
+          const currentCount = (selected.interview?.messages || []).length;
+          const newCount = (res.application.interview.messages || []).length;
+          if (newCount !== currentCount) {
+            renderDirectorInterview(res.application.interview);
+            selected.interview = res.application.interview;
+          }
+        }
+      } catch {}
+    }, 3500);
+  }
+
   function message(copy, error = false) {
     const node = $("#" + page + "-message");
     if (!node) return;
@@ -193,6 +243,7 @@
           }
         });
       }
+      pollApplicantInterview();
     }
   }
 
@@ -350,6 +401,7 @@
         if (detail.interview || detail.status === "Interview") {
           interviewSec.hidden = false;
           renderDirectorInterview(detail.interview || { messages: [] });
+          pollDirectorInterview(selected.id);
 
           if (directorSendBtn && !directorSendBtn.dataset.wired) {
             directorSendBtn.dataset.wired = "true";

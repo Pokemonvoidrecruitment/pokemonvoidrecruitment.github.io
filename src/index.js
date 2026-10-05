@@ -528,15 +528,7 @@ app.post("/api/admin/applications/:id/interview/message", requireDirector, (req,
   statements.saveInterview.run(row.id, ticket.status, JSON.stringify(messages), updatedNow);
 
   dmApplicant(row.discord_user_id, {
-    embeds: [
-      new EmbedBuilder()
-        .setTitle("Pokémon Void — New Interview Message")
-        .setColor(0x0ea5e9)
-        .setDescription(`You have a new message on your interview ticket for application **${row.id}**:\n\n> *${text.length > 280 ? text.slice(0, 277) + "..." : text}*`)
-        .addFields({ name: "Reply to Directors", value: `[Open Interview Ticket](${cleanOrigin}/interview)` })
-        .setFooter({ text: "Pokémon Void Recruitment Team" })
-        .setTimestamp()
-    ]
+    content: `💬 **[Pokémon Void Director Desk — ${req.user.global_name || req.user.username || "Director"}]**\n${text}\n\n*(💡 You can reply directly to this DM to send your message to the website!)*`
   });
 
   res.json({
