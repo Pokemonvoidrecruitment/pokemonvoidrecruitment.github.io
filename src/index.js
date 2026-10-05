@@ -106,11 +106,18 @@ app.use((req, res, next) => {
     p.startsWith("/src") ||
     p.startsWith("/node_modules") ||
     p.startsWith("/.git") ||
+    p.startsWith("/.github") ||
     p.includes(".sqlite") ||
     p.includes(".db") ||
     p.includes(".env") ||
     p.includes("package") ||
-    p.includes(".bak")
+    p.includes(".bak") ||
+    p.includes(".yaml") ||
+    p.includes(".yml") ||
+    p.includes(".md") ||
+    p.includes(".lock") ||
+    p.endsWith(".sql") ||
+    p.includes("test-e2e")
   ) {
     return res.status(403).json({ message: "Access forbidden." });
   }
@@ -156,8 +163,8 @@ const upload = multer({
   }
 });
 
-// Protected interview uploads: require signed in session (Directors or Applicants)
-app.get("/uploads/:filename", (req, res) => {
+// Protected interview uploads: strictly restricted to Recruitment Directors or the specific applicant who owns the ticket
+app.get("/uploads/:filename", async (req, res) => {
   const user = currentUser(req);
   if (!user) {
     return res.status(401).send("Discord sign-in required to view recruitment attachments.");
@@ -165,7 +172,22 @@ app.get("/uploads/:filename", (req, res) => {
   const filename = path.basename(req.params.filename);
   const filePath = path.join(uploadsDir, filename);
 
-  if (!fs.existsSync(filePath)) {
+  // Permission check: Directors have full access; Applicants can only view files in their own tickets
+  const director = await isDirector(user.discord_user_id);
+  if (!director) {
+    const app = statements.byDiscord.get(user.discord_user_id);
+    if (!app) {
+      return res.status(403).send("Access denied. You do not have permission to view this attachment.");
+    }
+    const ticket = statements.interview.get(app.id);
+    const inTicket = ticket && ticket.messages_json && ticket.messages_json.includes(filename);
+    const inApp = app.payload_json && app.payload_json.includes(filename);
+    if (!inTicket && !inApp) {
+      return res.status(403).send("Access denied. You do not have permission to view this attachment.");
+    }
+  }
+
+  if (!filePath.startsWith(uploadsDir) || !fs.existsSync(filePath)) {
     return res.status(404).send("File not found.");
   }
 

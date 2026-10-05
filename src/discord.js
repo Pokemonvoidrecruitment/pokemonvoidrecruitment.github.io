@@ -183,7 +183,7 @@ export async function notifyDirectors({event,applicationId,displayName,roles,sta
     const portalUrl = `${(config.frontendOrigin || "https://pokemonvoidrecruitment.github.io").replace(/\/$/, "")}/admin`;
     embed.setDescription(`[Open Director Desk](${portalUrl})`);
 
-    await channel.send({embeds:[embed]});
+    await channel.send({ embeds: [embed], allowedMentions: { parse: [] } });
   } catch(err) {
     console.warn("[discord] Notification dispatch failed:", err.message);
   }
