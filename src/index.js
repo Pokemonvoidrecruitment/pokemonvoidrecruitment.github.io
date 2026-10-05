@@ -418,11 +418,18 @@ app.get("/auth/discord/callback", async (req, res) => {
     const stateParam = String(req.query.state || "");
     const [payload, sig] = stateParam.split(".");
     let returnTo = config.frontendOrigin || "/";
-    if (payload && sig && safeEqual(sig, sign(payload, config.internalEventSecret))) {
+    let isValidSig = Boolean(payload && sig && safeEqual(sig, sign(payload, config.internalEventSecret)));
+    if (payload) {
       try {
         const parsed = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
-        if (Date.now() - parsed.time < 900000 && parsed.returnTo) {
-          returnTo = parsed.returnTo;
+        if (parsed.returnTo) {
+          const candidate = safeRedirectUrl(parsed.returnTo).toString();
+          if (isValidSig && Date.now() - parsed.time < 900000) {
+            returnTo = candidate;
+          } else if (candidate.includes("pokemonvoidrecruitment.github.io") || candidate.startsWith(config.frontendOrigin)) {
+            // Safe fallback to our own domain even if state signature expired
+            returnTo = candidate;
+          }
         }
       } catch {}
     }

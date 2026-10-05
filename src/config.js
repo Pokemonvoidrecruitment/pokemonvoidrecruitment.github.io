@@ -18,7 +18,10 @@ const isProduction = process.env.NODE_ENV === "production" || Boolean(process.en
 
 import crypto from "node:crypto";
 
-const defaultInternalSecret = isProduction ? crypto.randomBytes(32).toString("hex") : "dev-internal-secret";
+const stableFallback = crypto.createHash("sha256").update(
+  clean(process.env.DISCORD_CLIENT_SECRET || process.env.DISCORD_BOT_TOKEN || "pv-stable-internal-secret-seed")
+).digest("hex");
+const defaultInternalSecret = stableFallback;
 
 export const config = {
   port: Number(process.env.PORT || 3000),

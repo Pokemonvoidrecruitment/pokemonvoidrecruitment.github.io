@@ -254,7 +254,7 @@
         dot.style.width = "8px";
         dot.style.height = "8px";
         dot.style.borderRadius = "50%";
-        dot.style.background = dotColor;
+        dot.style.background = session.user.isDirector ? "#ffd700" : "#22c55e";
         var nameSpan = document.createElement("span");
         nameSpan.textContent = session.user.globalName || session.user.username;
         userBadge.append(dot, nameSpan);
@@ -287,26 +287,47 @@
     if (oldDevBar) oldDevBar.remove();
   }
 
-  async function loadSession() {
-    try {
-      var response = await fetch(apiUrl("/api/session"), {
-        credentials: "include",
-        headers: getAuthHeaders({ Accept: "application/json" }),
-      });
-      if (!response.ok) {
-        if (response.status === 401) {
-          clearStoredToken();
-        }
-        updateAccountUi(null);
-        return null;
-      }
-      var session = await response.json();
-      updateAccountUi(session);
-      return session;
-    } catch (error) {
-      updateAccountUi(null);
-      return null;
+  var currentSession = null;
+  var sessionPromise = null;
+
+  async function loadSession(forceRefresh) {
+    if (currentSession && !forceRefresh) {
+      try { updateAccountUi(currentSession); } catch (e) {}
+      return currentSession;
     }
+    if (sessionPromise && !forceRefresh) {
+      return sessionPromise;
+    }
+
+    sessionPromise = (async function () {
+      try {
+        var response = await fetch(apiUrl("/api/session"), {
+          credentials: "include",
+          headers: getAuthHeaders({ Accept: "application/json" }),
+        });
+        if (!response.ok) {
+          if (response.status === 401) {
+            clearStoredToken();
+          }
+          currentSession = null;
+          try { updateAccountUi(null); } catch (e) {}
+          return null;
+        }
+        var session = await response.json();
+        currentSession = session;
+        try { updateAccountUi(session); } catch (e) { console.error("[site] updateAccountUi error:", e); }
+        try { window.dispatchEvent(new CustomEvent("pv:session", { detail: session })); } catch (e) {}
+        return session;
+      } catch (error) {
+        currentSession = null;
+        try { updateAccountUi(null); } catch (e) {}
+        return null;
+      } finally {
+        sessionPromise = null;
+      }
+    })();
+
+    return sessionPromise;
   }
 
   window.VoidRecruitment = {

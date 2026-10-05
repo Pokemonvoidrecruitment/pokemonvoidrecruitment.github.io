@@ -609,63 +609,72 @@
     const authGate = document.getElementById("apply-auth-gate");
     const existingAlert = document.getElementById("apply-existing-alert");
     const rail = document.querySelector(".step-rail");
-    const session = await (helpers.loadSession ? helpers.loadSession() : null);
 
-    if (!session?.user) {
-      if (authGate) {
-        authGate.hidden = false;
-        const loginBtn = authGate.querySelector("[data-discord-login]");
-        if (loginBtn) {
-          loginBtn.href = helpers.loginUrl ? helpers.loginUrl(window.location.href) : "#";
+    async function applySession(session) {
+      if (!session?.user) {
+        if (authGate) {
+          authGate.hidden = false;
+          const loginBtn = authGate.querySelector("[data-discord-login]");
+          if (loginBtn) {
+            loginBtn.href = helpers.loginUrl ? helpers.loginUrl(window.location.href) : "#";
+          }
+        }
+        form.hidden = true;
+        if (rail) {
+          rail.style.opacity = "0.4";
+          rail.style.pointerEvents = "none";
+        }
+        return;
+      }
+
+      // Authenticated! Unhide the form and re-enable rail
+      if (authGate) authGate.hidden = true;
+      form.hidden = false;
+      if (rail) {
+        rail.style.opacity = "1";
+        rail.style.pointerEvents = "auto";
+      }
+
+      // Auto-fill preferred name if field is empty
+      const nameField = form.querySelector('input[name="name"]');
+      if (nameField && !nameField.value.trim()) {
+        const preferred = session.user.globalName || session.user.username || "";
+        if (preferred) {
+          nameField.value = preferred;
+          dirty = true;
+          saveDraft();
         }
       }
-      form.hidden = true;
-      if (rail) {
-        rail.style.opacity = "0.4";
-        rail.style.pointerEvents = "none";
-      }
-      return;
-    }
 
-    // Authenticated! Unhide the form and re-enable rail
-    if (authGate) authGate.hidden = true;
-    form.hidden = false;
-    if (rail) {
-      rail.style.opacity = "1";
-      rail.style.pointerEvents = "auto";
-    }
-
-    // Auto-fill preferred name if field is empty
-    const nameField = form.querySelector('input[name="name"]');
-    if (nameField && !nameField.value.trim()) {
-      const preferred = session.user.globalName || session.user.username || "";
-      if (preferred) {
-        nameField.value = preferred;
-        dirty = true;
-        saveDraft();
-      }
-    }
-
-    // Check if user already has an active application
-    try {
-      const statusUrl = helpers.apiUrl ? helpers.apiUrl("/api/application/status") : (helpers.apiBase + "/api/application/status");
-      const r = await fetch(statusUrl, {
-        headers: helpers.getAuthHeaders ? helpers.getAuthHeaders() : {},
-        credentials: "include"
-      });
-      if (r.ok) {
-        const res = await r.json();
-        if (res.application) {
-          if (existingAlert) {
-            existingAlert.hidden = false;
-            const desc = document.getElementById("existing-app-desc");
-            if (desc) {
-              desc.textContent = `You already have an active application (${res.application.id}) currently in '${res.application.status}' stage. Check your status desk or wait for review.`;
+      // Check if user already has an active application
+      try {
+        const statusUrl = helpers.apiUrl ? helpers.apiUrl("/api/application/status") : (helpers.apiBase + "/api/application/status");
+        const r = await fetch(statusUrl, {
+          headers: helpers.getAuthHeaders ? helpers.getAuthHeaders() : {},
+          credentials: "include"
+        });
+        if (r.ok) {
+          const res = await r.json();
+          if (res.application) {
+            if (existingAlert) {
+              existingAlert.hidden = false;
+              const desc = document.getElementById("existing-app-desc");
+              if (desc) {
+                desc.textContent = `You already have an active application (${res.application.id}) currently in '${res.application.status}' stage. Check your status desk or wait for review.`;
+              }
             }
           }
         }
-      }
-    } catch {}
+      } catch {}
+    }
+
+    // Reactive listener whenever session changes
+    window.addEventListener("pv:session", (e) => {
+      applySession(e.detail);
+    });
+
+    const session = await (helpers.loadSession ? helpers.loadSession() : null);
+    applySession(session);
   }
 
   showStep(currentStep, false, false);
