@@ -42,9 +42,29 @@ app.use(express.json({
 }));
 app.use(cookieParser());
 
+// Security: Block all attempts to request sensitive files, databases, source code, or configs
+app.use((req, res, next) => {
+  const p = req.path.toLowerCase();
+  if (
+    p.startsWith("/data") ||
+    p.startsWith("/src") ||
+    p.startsWith("/node_modules") ||
+    p.startsWith("/.git") ||
+    p.includes(".sqlite") ||
+    p.includes(".db") ||
+    p.includes(".env") ||
+    p.includes("package") ||
+    p.includes(".bak")
+  ) {
+    return res.status(403).json({ message: "Access forbidden." });
+  }
+  next();
+});
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-app.use(express.static(path.join(__dirname, "../public"), { extensions: ["html"] }));
-app.use(express.static(path.join(__dirname, ".."), { extensions: ["html"] }));
+const staticOpts = { extensions: ["html"], dotfiles: "deny" };
+app.use(express.static(path.join(__dirname, "../public"), staticOpts));
+app.use(express.static(path.join(__dirname, ".."), staticOpts));
 
 async function discordToken(code) {
   const credentials = Buffer.from(`${config.discord.clientId}:${config.discord.clientSecret}`).toString("base64");
@@ -161,10 +181,10 @@ function timeline(status) {
 // Routes
 app.get("/health", (_, res) => res.json({ ok: true, devMode: config.isDev }));
 
-// Dev / Testing login (available in non-production environments)
+// Dev / Testing login (strictly disabled in production and cloud deployments)
 app.get("/auth/dev/login", (req, res) => {
-  if (!config.isDev && process.env.ENABLE_DEV_LOGIN !== "true") {
-    return res.status(403).send("Dev login is disabled in production.");
+  if (config.isProduction || !config.isDev || process.env.ENABLE_DEV_LOGIN !== "true") {
+    return res.status(403).send("Dev login is disabled.");
   }
   const role = String(req.query.role || "applicant").toLowerCase();
   const name = String(req.query.name || (role === "director" ? "Director Oak" : "Ash Ketchum")).trim();
@@ -180,9 +200,12 @@ app.get("/auth/dev/login", (req, res) => {
   res.redirect(returnTo);
 });
 
-app.get("/auth/dev/admin.html", (req, res) => res.redirect("/admin.html"));
-app.get("/auth/dev/status.html", (req, res) => res.redirect("/status.html"));
-app.get("/auth/dev/apply.html", (req, res) => res.redirect("/apply.html"));
+app.get("/auth/dev/*", (req, res) => {
+  if (config.isProduction || !config.isDev || process.env.ENABLE_DEV_LOGIN !== "true") {
+    return res.status(403).send("Dev endpoints are disabled.");
+  }
+  res.redirect("/");
+});
 
 app.get("/auth/discord", (req, res) => {
   // If Discord credentials are not yet configured, automatically fall back to dev login in dev mode

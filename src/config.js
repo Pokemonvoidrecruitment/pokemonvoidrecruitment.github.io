@@ -14,9 +14,12 @@ for (const key of required) {
 }
 console.log(`[config] OAuth Redirect URI: ${defaultRedirectUri}`);
 
+const isProduction = process.env.NODE_ENV === "production" || Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_PUBLIC_DOMAIN || process.env.RENDER);
+
 export const config = {
   port: Number(process.env.PORT || 3000),
-  isDev: process.env.NODE_ENV !== "production",
+  isDev: !isProduction,
+  isProduction,
   publicBaseUrl: defaultBaseUrl,
   frontendOrigin: clean(process.env.FRONTEND_ORIGIN || "https://pokemonvoidrecruitment.github.io").replace(/\/$/, ""),
   cookieName: clean(process.env.SESSION_COOKIE_NAME || "pv_recruitment"),
@@ -31,8 +34,8 @@ export const config = {
     directorChannelId: clean(process.env.DIRECTOR_CHANNEL_ID),
     directorIds: new Set([
       ...clean(process.env.DIRECTOR_DISCORD_IDS || "").split(",").map(x=>x.trim()).filter(Boolean),
-      // Automatically include dev-director in development mode
-      ...(process.env.NODE_ENV !== "production" ? ["dev-director"] : [])
+      // dev-director is strictly forbidden in production or cloud hosts
+      ...(!isProduction && process.env.ENABLE_DEV_LOGIN === "true" ? ["dev-director"] : [])
     ]),
     applicantDMs: process.env.APPLICANT_DMS !== "false"
   },
