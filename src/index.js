@@ -6,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import crypto from "node:crypto";
 import { config } from "./config.js";
-import { db, statements, appView } from "./db.js";
+import { db, statements, appView, deleteApplications } from "./db.js";
 import { randomToken, sha256, sign, safeEqual } from "./security.js";
 import { EmbedBuilder } from "discord.js";
 import { startDiscord, isDirector, notifyDirectors, dmApplicant } from "./discord.js";
@@ -500,6 +500,16 @@ app.delete("/api/admin/applications/:id", requireDirector, (req, res) => {
   res.json({ ok: true, deleted: row.id });
 });
 
+// Director bulk-deletes multiple applications
+app.post("/api/admin/applications/bulk-delete", requireDirector, (req, res) => {
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids.filter(Boolean) : [];
+  if (!ids.length) return res.status(400).json({ message: "No application IDs provided." });
+
+  const deletedCount = deleteApplications(ids);
+  console.log(`[admin] Bulk deleted ${deletedCount} application(s) by ${req.user.global_name || req.user.username}`);
+  res.json({ ok: true, deletedCount, deletedIds: ids });
+});
+
 // Director posts a message to an applicant's interview ticket
 app.post("/api/admin/applications/:id/interview/message", requireDirector, (req, res) => {
   const row = statements.byId.get(req.params.id);
@@ -532,7 +542,7 @@ app.post("/api/admin/applications/:id/interview/message", requireDirector, (req,
   statements.saveInterview.run(row.id, ticket.status, JSON.stringify(messages), updatedNow);
 
   dmApplicant(row.discord_user_id, {
-    content: `💬 **[Pokémon Void Director Desk — ${req.user.global_name || req.user.username || "Director"}]**\n${text}\n\n*(💡 You can reply directly to this DM to send your message to the website!)*`
+    content: `💬 **[${req.user.global_name || req.user.username || "Director"}]**\n${text}`
   });
 
   res.json({

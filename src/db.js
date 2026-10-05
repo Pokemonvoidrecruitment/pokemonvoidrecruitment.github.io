@@ -55,6 +55,20 @@ export const statements = {
   deleteInterview: db.prepare(`DELETE FROM interviews WHERE application_id=?`)
 };
 
+export function deleteApplications(ids) {
+  if (!Array.isArray(ids) || !ids.length) return 0;
+  const deleteTx = db.transaction((idList) => {
+    let count = 0;
+    for (const id of idList) {
+      statements.deleteInterview.run(id);
+      const res = statements.deleteApp.run(id);
+      count += res.changes;
+    }
+    return count;
+  });
+  return deleteTx(ids);
+}
+
 export function appView(row) {
   if (!row) return null;
   let p = {};

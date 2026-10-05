@@ -156,6 +156,15 @@
             placeholder="Name, role or application ID"
           />
         </div>
+        <div class="bulk-actions-toolbar" data-bulk-toolbar style="display: none; align-items: center; justify-content: space-between; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.4); padding: 0.6rem 1rem; border-radius: 8px; margin-bottom: 0.75rem;">
+          <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <span style="font-weight: 600; color: #f87171;" data-bulk-count>0 applications selected</span>
+            <button class="button ghost" type="button" data-bulk-deselect style="padding: 0.2rem 0.5rem; font-size: 0.8rem;">Clear</button>
+          </div>
+          <button class="button danger" type="button" data-bulk-delete style="background-color: #ef4444; color: #ffffff; border-color: #ef4444; padding: 0.35rem 0.8rem; font-size: 0.85rem; font-weight: 600;">
+            🗑️ Delete Selected
+          </button>
+        </div>
         <div
           class="table-scroll"
           role="region"
@@ -165,11 +174,15 @@
           <table class="queue-table">
             <thead>
               <tr>
+                <th scope="col" style="width: 36px; text-align: center;">
+                  <input type="checkbox" id="queue-select-all" title="Select all" style="cursor: pointer; width: 16px; height: 16px;">
+                </th>
                 <th scope="col">Applicant</th>
                 <th scope="col">Roles</th>
                 <th scope="col">Status</th>
                 <th scope="col">Submitted</th>
                 <th scope="col">Handler</th>
+                <th scope="col" style="width: 50px; text-align: right;">Action</th>
               </tr>
             </thead>
             <tbody data-queue-body></tbody>

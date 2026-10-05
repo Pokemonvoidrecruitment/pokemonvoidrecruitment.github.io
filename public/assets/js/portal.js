@@ -188,45 +188,71 @@
     container.className = "ticket-body";
     if (!rawText) return container;
 
-    // Sanitize text first
-    let safe = String(rawText)
+    // 1. Extract media URLs first
+    const mediaNodes = [];
+    const urlPattern = /(https?:\/\/[^\s<]+)/gi;
+
+    const isMediaUrl = (url) => {
+      const cleanUrl = url.split("?")[0].toLowerCase();
+      const isImg = /\.(png|jpe?g|gif|webp|bmp|svg|tiff)$/i.test(cleanUrl) ||
+        /cdn\.discordapp\.com\/attachments\/.*\.(png|jpe?g|gif|webp|bmp|svg)/i.test(url) ||
+        /media\.discordapp\.net\/attachments\/.*\.(png|jpe?g|gif|webp|bmp|svg)/i.test(url) ||
+        /media\.tenor\.com\/.*\.gif/i.test(url) ||
+        /media\.giphy\.com\/.*\.gif/i.test(url) ||
+        /i\.imgur\.com\/.*\.(png|jpe?g|gif|webp)/i.test(url);
+      const isVideo = /\.(mp4|webm|mov|m4v|ogg)$/i.test(cleanUrl) ||
+        /cdn\.discordapp\.com\/attachments\/.*\.(mp4|webm|mov|m4v)/i.test(url) ||
+        /media\.discordapp\.net\/attachments\/.*\.(mp4|webm|mov|m4v)/i.test(url);
+      return { isImg, isVideo };
+    };
+
+    // Remove media URLs from text and collect their HTML elements
+    let stripped = String(rawText).replace(urlPattern, (matchedUrl) => {
+      let url = matchedUrl;
+      let trailingPunct = "";
+      const matchPunct = url.match(/[.,!?;:)>]+$/);
+      if (matchPunct) {
+        trailingPunct = matchPunct[0];
+        url = url.slice(0, -trailingPunct.length);
+      }
+      const { isImg, isVideo } = isMediaUrl(url);
+      if (isImg) {
+        mediaNodes.push(
+          `<a href="${url}" target="_blank" rel="noopener noreferrer" style="display:inline-block; margin-top:8px; margin-right:8px;"><img class="ticket-media-img" src="${url}" loading="lazy" alt="Image" style="max-width: 100%; max-height: 400px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); display: block;" onerror="this.onerror=null;this.style.display='none';"></a>`
+        );
+        return ""; // Do not show the link in the message text!
+      }
+      if (isVideo) {
+        mediaNodes.push(
+          `<div style="margin-top:8px;"><video class="ticket-media-video" controls playsinline src="${url}" preload="metadata" style="max-width: 100%; max-height: 400px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); display: block;"></video></div>`
+        );
+        return ""; // Do not show the link in the message text!
+      }
+      // Non-media URL: protect with placeholder
+      return `###URL_TOKEN:${encodeURIComponent(url)}###` + trailingPunct;
+    });
+
+    // 2. Escape HTML
+    let safe = stripped
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;");
 
-    // Replace Discord custom emojis: <:name:id> or <a:name:id>
+    // 3. Restore non-media URLs as clickable links
+    safe = safe.replace(/###URL_TOKEN:(.*?)###/g, (_, encoded) => {
+      const url = decodeURIComponent(encoded);
+      return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="ticket-link" style="color: #38bdf8; text-decoration: underline; word-break: break-all;">${url}</a>`;
+    });
+
+    // 4. Replace Discord custom emojis: <:name:id> or <a:name:id>
     safe = safe.replace(/&lt;(a)?:([a-zA-Z0-9_]+):([0-9]+)&gt;/g, (match, anim, name, id) => {
       const ext = anim ? "gif" : "png";
       return `<img class="discord-emoji" src="https://cdn.discordapp.com/emojis/${id}.${ext}?size=48" alt=":${name}:" title=":${name}:" loading="lazy" style="width: 1.45em; height: 1.45em; vertical-align: -0.3em; display: inline-block; object-fit: contain;">`;
     });
 
-    // Detect media URLs and standard URLs
-    const mediaNodes = [];
-    const urlRegex = /(https?:\/\/[^\s<]+)/g;
-
-    safe = safe.replace(urlRegex, (url) => {
-      const cleanUrl = url.split("?")[0].toLowerCase();
-      const isImg = /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(cleanUrl) ||
-        /cdn\.discordapp\.com\/attachments\/.*\.(png|jpe?g|gif|webp)/i.test(url) ||
-        /media\.discordapp\.net\/attachments\/.*\.(png|jpe?g|gif|webp)/i.test(url) ||
-        /i\.imgur\.com\/.*\.(png|jpe?g|gif|webp)/i.test(url);
-
-      const isVideo = /\.(mp4|webm|mov|ogg)$/i.test(cleanUrl) ||
-        /cdn\.discordapp\.com\/attachments\/.*\.(mp4|webm|mov)/i.test(url);
-
-      if (isImg) {
-        mediaNodes.push(`<a href="${url}" target="_blank" rel="noopener noreferrer" style="display:block; margin-top:8px;"><img class="ticket-media-img" src="${url}" loading="lazy" alt="Attachment" style="max-width: 100%; max-height: 400px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); display: block;" onerror="this.onerror=null;this.style.display='none';"></a>`);
-        return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="ticket-link" style="color: #38bdf8; text-decoration: underline; word-break: break-all;">${url}</a>`;
-      } else if (isVideo) {
-        mediaNodes.push(`<div style="margin-top:8px;"><video class="ticket-media-video" controls playsinline src="${url}" preload="metadata" style="max-width: 100%; max-height: 400px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); display: block;"></video></div>`);
-        return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="ticket-link" style="color: #38bdf8; text-decoration: underline; word-break: break-all;">${url}</a>`;
-      } else {
-        return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="ticket-link" style="color: #38bdf8; text-decoration: underline; word-break: break-all;">${url}</a>`;
-      }
-    });
-
-    safe = safe.replace(/\n/g, "<br>");
-    container.innerHTML = safe + (mediaNodes.length ? mediaNodes.join("") : "");
+    safe = safe.trim().replace(/\n/g, "<br>");
+    const mediaHtml = mediaNodes.length ? `<div class="ticket-media-group" style="margin-top: ${safe ? '8px' : '0'};">${mediaNodes.join("")}</div>` : "";
+    container.innerHTML = (safe ? `<div>${safe}</div>` : "") + mediaHtml;
     return container;
   }
 
@@ -329,6 +355,31 @@
     selected = null,
     queueFilter = "all";
 
+  const selectedAppIds = new Set();
+
+  function updateBulkToolbar() {
+    const toolbar = $("[data-bulk-toolbar]");
+    const countEl = $("[data-bulk-count]");
+    const selectAllCheckbox = $("#queue-select-all");
+    if (!toolbar) return;
+
+    if (selectedAppIds.size > 0) {
+      toolbar.style.display = "flex";
+      if (countEl) countEl.textContent = `${selectedAppIds.size} application${selectedAppIds.size === 1 ? "" : "s"} selected`;
+    } else {
+      toolbar.style.display = "none";
+    }
+
+    if (selectAllCheckbox) {
+      const visibleCheckboxes = document.querySelectorAll(".queue-row-select");
+      if (visibleCheckboxes.length > 0) {
+        selectAllCheckbox.checked = Array.from(visibleCheckboxes).every(cb => cb.checked);
+      } else {
+        selectAllCheckbox.checked = false;
+      }
+    }
+  }
+
   function renderQueue() {
     const query = $("#queue-search").value.trim().toLowerCase();
     const visible = applications.filter((app) => {
@@ -347,6 +398,25 @@
     body.replaceChildren();
     for (const app of visible) {
       const row = document.createElement("tr");
+
+      // Checkbox column
+      const checkTd = document.createElement("td");
+      checkTd.style.textAlign = "center";
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.className = "queue-row-select";
+      cb.dataset.appId = app.id;
+      cb.checked = selectedAppIds.has(app.id);
+      cb.addEventListener("change", (e) => {
+        e.stopPropagation();
+        if (cb.checked) selectedAppIds.add(app.id);
+        else selectedAppIds.delete(app.id);
+        updateBulkToolbar();
+      });
+      checkTd.append(cb);
+      row.append(checkTd);
+
+      // Applicant name button
       const name = document.createElement("td");
       const button = document.createElement("button");
       button.className = "text-button";
@@ -355,6 +425,7 @@
       button.addEventListener("click", () => openRecord(app));
       name.append(button);
       row.append(name);
+
       for (const value of [
         roleText(app.roles),
         app.status,
@@ -365,6 +436,54 @@
         cell.textContent = value || "—";
         row.append(cell);
       }
+
+      // Row Delete button
+      const actionTd = document.createElement("td");
+      actionTd.style.textAlign = "right";
+      const delBtn = document.createElement("button");
+      delBtn.type = "button";
+      delBtn.className = "text-button";
+      delBtn.title = "Delete application";
+      delBtn.textContent = "🗑️";
+      delBtn.style.color = "#ef4444";
+      delBtn.style.padding = "4px 8px";
+      delBtn.style.borderRadius = "4px";
+      delBtn.style.cursor = "pointer";
+      delBtn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        if (!confirm(`Permanently delete application ${app.id} (${app.displayName || "Applicant"})?`)) return;
+        delBtn.disabled = true;
+        try {
+          if (helpers.apiBase) {
+            const r = await fetch((helpers.apiBase || "") + "/api/admin/applications/" + encodeURIComponent(app.id), {
+              method: "DELETE",
+              credentials: "include",
+              headers: { Accept: "application/json" }
+            });
+            const data = await r.json();
+            if (!r.ok) throw new Error(data.message || "Failed to delete.");
+            selectedAppIds.delete(app.id);
+            if (selected?.id === app.id) {
+              $("#director-detail").hidden = true;
+              selected = null;
+            }
+            await loadLivePage();
+          } else {
+            applications = applications.filter(a => a.id !== app.id);
+            selectedAppIds.delete(app.id);
+            if (selected?.id === app.id) {
+              $("#director-detail").hidden = true;
+              selected = null;
+            }
+            renderQueue();
+          }
+        } catch (err) {
+          alert("Delete failed: " + err.message);
+        }
+      });
+      actionTd.append(delBtn);
+      row.append(actionTd);
+
       body.append(row);
     }
     $("[data-queue-empty]").hidden = visible.length > 0;
@@ -372,6 +491,7 @@
       "[data-queue-count]",
       visible.length + " of " + applications.length + " applications",
     );
+    updateBulkToolbar();
   }
 
   function renderDirectorInterview(ticket) {
@@ -516,6 +636,77 @@
       $("#director-detail").hidden = true;
       $("#queue-search").focus();
     });
+
+    const selectAll = $("#queue-select-all");
+    if (selectAll) {
+      selectAll.addEventListener("change", () => {
+        const visibleCheckboxes = document.querySelectorAll(".queue-row-select");
+        for (const cb of visibleCheckboxes) {
+          cb.checked = selectAll.checked;
+          const id = cb.dataset.appId;
+          if (id) {
+            if (selectAll.checked) selectedAppIds.add(id);
+            else selectedAppIds.delete(id);
+          }
+        }
+        updateBulkToolbar();
+      });
+    }
+
+    const deselectBtn = $("[data-bulk-deselect]");
+    if (deselectBtn) {
+      deselectBtn.addEventListener("click", () => {
+        selectedAppIds.clear();
+        const visibleCheckboxes = document.querySelectorAll(".queue-row-select");
+        for (const cb of visibleCheckboxes) cb.checked = false;
+        if (selectAll) selectAll.checked = false;
+        updateBulkToolbar();
+      });
+    }
+
+    const bulkDeleteBtn = $("[data-bulk-delete]");
+    if (bulkDeleteBtn) {
+      bulkDeleteBtn.addEventListener("click", async () => {
+        if (selectedAppIds.size === 0) return;
+        const count = selectedAppIds.size;
+        const confirmed = window.confirm(`Permanently delete ${count} selected application${count === 1 ? "" : "s"}? This action cannot be undone.`);
+        if (!confirmed) return;
+
+        bulkDeleteBtn.disabled = true;
+        try {
+          if (helpers.apiBase) {
+            const r = await fetch((helpers.apiBase || "") + "/api/admin/applications/bulk-delete", {
+              method: "POST",
+              credentials: "include",
+              headers: { "Content-Type": "application/json", Accept: "application/json" },
+              body: JSON.stringify({ ids: Array.from(selectedAppIds) }),
+            });
+            const data = await r.json();
+            if (!r.ok) throw new Error(data.message || "Bulk delete failed.");
+            if (selected && selectedAppIds.has(selected.id)) {
+              $("#director-detail").hidden = true;
+              selected = null;
+            }
+            selectedAppIds.clear();
+            await loadLivePage();
+            alert(`Successfully deleted ${data.deletedCount} application(s).`);
+          } else {
+            applications = applications.filter((a) => !selectedAppIds.has(a.id));
+            if (selected && selectedAppIds.has(selected.id)) {
+              $("#director-detail").hidden = true;
+              selected = null;
+            }
+            selectedAppIds.clear();
+            renderQueue();
+          }
+        } catch (err) {
+          alert("Delete failed: " + err.message);
+        } finally {
+          bulkDeleteBtn.disabled = false;
+          updateBulkToolbar();
+        }
+      });
+    }
   }
 
   async function wireLiveActions() {
