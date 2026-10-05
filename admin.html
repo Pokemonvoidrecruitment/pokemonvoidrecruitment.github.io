@@ -65,14 +65,15 @@
       <div id="admin-message" role="status" hidden></div>
       <section id="admin-locked" class="file-panel" hidden>
         <div class="board-body">
-          <h2>Director access required</h2>
-          <p>
+          <h2 id="admin-locked-title">Director access required</h2>
+          <p id="admin-locked-copy">
             Sign in with an authorised Discord account to view recruitment
             records.
           </p>
-          <a class="button primary" href="#" data-discord-login
-            >Continue with Discord</a
-          >
+          <div id="admin-locked-actions" style="margin-top: 1rem; display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+            <a class="button primary" href="#" data-discord-login id="admin-login-btn">Continue with Discord</a>
+            <button class="button ghost" type="button" id="admin-switch-btn" hidden>Sign out</button>
+          </div>
         </div>
       </section>
       <section id="admin-shell" class="admin-shell" hidden>

@@ -526,6 +526,33 @@
       return;
     }
 
+    if (page === "admin" && !session.user.isDirector) {
+      const lockedSec = $("#admin-locked");
+      if (lockedSec) {
+        lockedSec.hidden = false;
+        text("#admin-locked-title", "Director access restricted");
+        const name = session.user.globalName || session.user.username;
+        const copyNode = $("#admin-locked-copy");
+        if (copyNode) {
+          copyNode.innerHTML = `Signed in as <strong>${name}</strong>, but this Discord account does not have the Recruitment Director role in the server. Only authorized staff can view the application desk.`;
+        }
+        const loginBtn = $("#admin-login-btn");
+        if (loginBtn) loginBtn.hidden = true;
+        const switchBtn = $("#admin-switch-btn");
+        if (switchBtn) {
+          switchBtn.hidden = false;
+          switchBtn.textContent = "Sign out / Switch account";
+          switchBtn.onclick = async () => {
+            try {
+              await fetch((helpers.apiBase || "") + "/auth/logout", { method: "POST", credentials: "include" });
+            } catch {}
+            window.location.reload();
+          };
+        }
+      }
+      return;
+    }
+
     try {
       const path = {
         status: "/api/application/status",
@@ -556,7 +583,29 @@
       }
     } catch (error) {
       if (page === "admin" && [401, 403].includes(error.status)) {
-        $("#admin-locked").hidden = false;
+        const lockedSec = $("#admin-locked");
+        if (lockedSec) {
+          lockedSec.hidden = false;
+          text("#admin-locked-title", "Director access restricted");
+          const name = session?.user?.globalName || session?.user?.username || "this account";
+          const copyNode = $("#admin-locked-copy");
+          if (copyNode) {
+            copyNode.innerHTML = `Signed in as <strong>${name}</strong>, but this Discord account does not have the Recruitment Director role in the server.`;
+          }
+          const loginBtn = $("#admin-login-btn");
+          if (loginBtn) loginBtn.hidden = true;
+          const switchBtn = $("#admin-switch-btn");
+          if (switchBtn) {
+            switchBtn.hidden = false;
+            switchBtn.textContent = "Sign out / Switch account";
+            switchBtn.onclick = async () => {
+              try {
+                await fetch((helpers.apiBase || "") + "/auth/logout", { method: "POST", credentials: "include" });
+              } catch {}
+              window.location.reload();
+            };
+          }
+        }
       } else if (page === "interview" && error.status === 404) {
         $("#interview-empty").hidden = false;
       } else {

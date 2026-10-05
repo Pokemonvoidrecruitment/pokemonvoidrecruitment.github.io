@@ -42,9 +42,11 @@ export async function isDirector(userId){
     const guild = await discord.guilds.fetch(config.discord.guildId);
     const member = await guild.members.fetch(userId);
     const result = Boolean(member && member.roles.cache.has(config.discord.directorRoleId));
+    console.log(`[discord] Role check for user ${userId} (${member.user.tag}): ${result ? "DIRECTOR" : "NOT A DIRECTOR"}`);
     directorCache.set(userId, { isDirector: result, expiresAt: Date.now() + 60000 });
     return result;
-  } catch {
+  } catch (err) {
+    console.warn(`[discord] Failed to check director role for ${userId}: ${err.message}`);
     directorCache.set(userId, { isDirector: false, expiresAt: Date.now() + 30000 });
     return false;
   }
