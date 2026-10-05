@@ -516,10 +516,13 @@ app.use((err, req, res, next) => {
   res.status(500).json({ message: "Internal server error." });
 });
 
-// Start Discord gracefully, then start Express server
-startDiscord().finally(() => {
-  app.listen(config.port, () => {
-    console.log(`Recruitment backend listening on port ${config.port}`);
-    console.log(`Open in browser: http://localhost:${config.port}`);
-  });
+// Start Express server immediately on 0.0.0.0 (required by Render port scanner)
+app.listen(config.port, "0.0.0.0", () => {
+  console.log(`Recruitment backend listening on port ${config.port} (0.0.0.0)`);
+  console.log(`Open in browser: ${config.publicBaseUrl || `http://localhost:${config.port}`}`);
+});
+
+// Connect Discord bot in background
+startDiscord().catch((err) => {
+  console.warn("[discord] Background start warning:", err.message);
 });

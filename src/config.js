@@ -3,17 +3,20 @@ import "dotenv/config";
 const required = ["DISCORD_CLIENT_ID","DISCORD_CLIENT_SECRET","DISCORD_REDIRECT_URI","DISCORD_BOT_TOKEN","DISCORD_GUILD_ID","DIRECTOR_ROLE_ID","DIRECTOR_CHANNEL_ID","INTERNAL_EVENT_SECRET"];
 for (const key of required) if (!process.env[key]) console.warn(`[config] Missing ${key}; related functionality will be unavailable.`);
 
+const defaultBaseUrl = (process.env.PUBLIC_BASE_URL || process.env.RENDER_EXTERNAL_URL || "http://localhost:3000").replace(/\/$/, "");
+const defaultRedirectUri = process.env.DISCORD_REDIRECT_URI || `${defaultBaseUrl}/auth/discord/callback`;
+
 export const config = {
   port: Number(process.env.PORT || 3000),
   isDev: process.env.NODE_ENV !== "production",
-  publicBaseUrl: (process.env.PUBLIC_BASE_URL || "").replace(/\/$/, ""),
-  frontendOrigin: (process.env.FRONTEND_ORIGIN || "").replace(/\/$/, ""),
+  publicBaseUrl: defaultBaseUrl,
+  frontendOrigin: (process.env.FRONTEND_ORIGIN || "https://pokemonvoidrecruitment.github.io").replace(/\/$/, ""),
   cookieName: process.env.SESSION_COOKIE_NAME || "pv_recruitment",
   sessionTtlMs: Number(process.env.SESSION_TTL_DAYS || 7) * 86400000,
   discord: {
     clientId: process.env.DISCORD_CLIENT_ID || "",
     clientSecret: process.env.DISCORD_CLIENT_SECRET || "",
-    redirectUri: process.env.DISCORD_REDIRECT_URI || "",
+    redirectUri: defaultRedirectUri,
     botToken: process.env.DISCORD_BOT_TOKEN || "",
     guildId: process.env.DISCORD_GUILD_ID || "",
     directorRoleId: process.env.DIRECTOR_ROLE_ID || "",
