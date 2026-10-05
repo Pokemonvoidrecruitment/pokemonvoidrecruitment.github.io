@@ -450,10 +450,15 @@
       const response = await fetch(helpers.apiBase + "/api/application", {
         method: "POST",
         credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
+        headers: helpers.getAuthHeaders
+          ? helpers.getAuthHeaders({
+              "Content-Type": "application/json",
+              Accept: "application/json",
+            })
+          : {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+            },
         body: JSON.stringify(payload()),
       });
       const result = await response.json().catch(() => ({}));

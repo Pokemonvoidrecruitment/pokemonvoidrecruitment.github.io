@@ -4,6 +4,29 @@
   var config = window.VOID_RECRUITMENT || {};
   var apiBase = (config.apiBaseUrl || "").replace(/\/$/, "");
 
+  // Mobile Cross-Domain Auth: Extract token from URL if returning from OAuth
+  try {
+    var urlParams = new URLSearchParams(window.location.search);
+    var urlToken = urlParams.get("token");
+    if (urlToken) {
+      localStorage.setItem("pv_token", urlToken);
+      urlParams.delete("token");
+      var cleanSearch = urlParams.toString();
+      var cleanUrl = window.location.pathname + (cleanSearch ? "?" + cleanSearch : "") + window.location.hash;
+      window.history.replaceState({}, document.title, cleanUrl);
+    }
+  } catch (e) {}
+
+  function getAuthHeaders(extraHeaders) {
+    var headers = Object.assign({}, extraHeaders || {});
+    var token = null;
+    try { token = localStorage.getItem("pv_token"); } catch (e) {}
+    if (token) {
+      headers["Authorization"] = "Bearer " + token;
+    }
+    return headers;
+  }
+
   function qs(selector, scope) {
     return (scope || document).querySelector(selector);
   }
@@ -52,9 +75,11 @@
     try {
       await fetch((apiBase || "") + "/auth/logout", {
         method: "POST",
-        credentials: "include"
+        credentials: "include",
+        headers: getAuthHeaders({ Accept: "application/json" })
       });
     } catch {}
+    try { localStorage.removeItem("pv_token"); } catch (e) {}
     window.location.reload();
   }
 
@@ -201,9 +226,12 @@
     try {
       var response = await fetch((apiBase || "") + "/api/session", {
         credentials: "include",
-        headers: { Accept: "application/json" },
+        headers: getAuthHeaders({ Accept: "application/json" }),
       });
       if (!response.ok) {
+        if (response.status === 401) {
+          try { localStorage.removeItem("pv_token"); } catch (e) {}
+        }
         updateAccountUi(null);
         return null;
       }
@@ -221,6 +249,7 @@
     loginUrl: loginUrl,
     logout: logout,
     loadSession: loadSession,
+    getAuthHeaders: getAuthHeaders,
     showInlineMessage: showInlineMessage,
     qs: qs,
     qsa: qsa,

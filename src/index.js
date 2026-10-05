@@ -30,7 +30,8 @@ app.use(cors({
       callback(null, false);
     }
   },
-  credentials: true
+  credentials: true,
+  allowedHeaders: ["Content-Type", "Authorization", "Accept", "X-Requested-With"]
 }));
 
 // Store rawBody for webhook HMAC verification
@@ -114,15 +115,18 @@ function setSession(res, user) {
   const isCrossSite = Boolean(config.frontendOrigin && !config.frontendOrigin.includes("localhost"));
   res.cookie(config.cookieName, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production" || isCrossSite,
+    secure: true,
     sameSite: isCrossSite ? "none" : "lax",
     maxAge: config.sessionTtlMs,
     path: "/"
   });
+  return token;
 }
 
 function currentUser(req) {
-  const token = req.cookies[config.cookieName];
+  const authHeader = req.get("authorization") || "";
+  const bearerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
+  const token = bearerToken || req.cookies[config.cookieName];
   if (!token) return null;
   const row = statements.session.get(sha256(token));
   if (!row || Date.parse(row.expires_at) < Date.now()) return null;
@@ -205,7 +209,6 @@ if (config.isProduction || !config.isDev || process.env.ENABLE_DEV_LOGIN !== "tr
 }
 
 app.get("/auth/discord", (req, res) => {
-  // If Discord credentials are not yet configured, automatically fall back to dev login in dev mode
   if (!config.discord.clientId || !config.discord.clientSecret) {
     if (config.isDev) {
       const returnTo = req.query.returnTo || "/status.html";
@@ -215,14 +218,15 @@ app.get("/auth/discord", (req, res) => {
   }
 
   const returnTo = req.query.returnTo || config.frontendOrigin || "/";
-  const state = randomToken(24);
-  res.cookie("pv_oauth_state", JSON.stringify({ state, returnTo }), {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: 600000,
-    path: "/"
-  });
+  const stateObj = {
+    nonce: randomToken(16),
+    returnTo,
+    time: Date.now()
+  };
+  const payload = Buffer.from(JSON.stringify(stateObj)).toString("base64url");
+  const signature = sign(payload, config.internalEventSecret);
+  const state = `${payload}.${signature}`;
+
   const url = new URL("https://discord.com/oauth2/authorize");
   url.searchParams.set("client_id", config.discord.clientId);
   url.searchParams.set("redirect_uri", config.discord.redirectUri);
@@ -234,23 +238,44 @@ app.get("/auth/discord", (req, res) => {
 
 app.get("/auth/discord/callback", async (req, res) => {
   try {
-    const saved = JSON.parse(req.cookies.pv_oauth_state || "{}");
-    if (!saved.state || !safeEqual(saved.state, String(req.query.state || ""))) {
-      return res.status(400).send("Invalid OAuth state.");
+    const stateParam = String(req.query.state || "");
+    const [payload, sig] = stateParam.split(".");
+    let returnTo = config.frontendOrigin || "/";
+    if (payload && sig && safeEqual(sig, sign(payload, config.internalEventSecret))) {
+      try {
+        const parsed = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+        if (Date.now() - parsed.time < 900000 && parsed.returnTo) {
+          returnTo = parsed.returnTo;
+        }
+      } catch {}
     }
-    res.clearCookie("pv_oauth_state", { path: "/" });
+
+    if (!req.query.code) {
+      return res.status(400).send("Missing authorization code from Discord.");
+    }
+
     const token = await discordToken(req.query.code);
     const user = await discordUser(token.access_token);
-    setSession(res, user);
-    res.redirect(saved.returnTo || config.frontendOrigin || "/");
+    const sessionToken = setSession(res, user);
+
+    let targetUrl;
+    try {
+      targetUrl = new URL(returnTo, config.frontendOrigin || "https://pokemonvoidrecruitment.github.io");
+    } catch {
+      targetUrl = new URL(config.frontendOrigin || "https://pokemonvoidrecruitment.github.io");
+    }
+    targetUrl.searchParams.set("token", sessionToken);
+    res.redirect(targetUrl.toString());
   } catch (e) {
-    console.error(e);
+    console.error("[discord-oauth]", e);
     res.status(502).send("Discord sign-in failed. Please return to the recruitment page and try again.");
   }
 });
 
 app.post("/auth/logout", (req, res) => {
-  const token = req.cookies[config.cookieName];
+  const authHeader = req.get("authorization") || "";
+  const bearerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
+  const token = bearerToken || req.cookies[config.cookieName];
   if (token) statements.deleteSession.run(sha256(token));
   res.clearCookie(config.cookieName, { path: "/" });
   res.json({ ok: true });

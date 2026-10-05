@@ -21,6 +21,10 @@
     (roles || []).map((role) => roleNames[role] || role).join(", ");
   const page = document.body.dataset.portalPage;
 
+  function authHeaders(extra = {}) {
+    return helpers.getAuthHeaders ? helpers.getAuthHeaders(extra) : Object.assign({}, extra);
+  }
+
   let applicantPollInterval = null;
   function pollApplicantInterview() {
     if (applicantPollInterval) return;
@@ -28,7 +32,7 @@
       try {
         const r = await fetch((helpers.apiBase || "") + "/api/application/status", {
           credentials: "include",
-          headers: { Accept: "application/json" }
+          headers: authHeaders({ Accept: "application/json" })
         });
         if (!r.ok) return;
         const res = await r.json();
@@ -55,7 +59,7 @@
       try {
         const r = await fetch(
           (helpers.apiBase || "") + "/api/admin/applications/" + encodeURIComponent(appId),
-          { credentials: "include", headers: { Accept: "application/json" } }
+          { credentials: "include", headers: authHeaders({ Accept: "application/json" }) }
         );
         if (!r.ok) return;
         const res = await r.json();
@@ -82,7 +86,7 @@
   async function getJson(path) {
     const response = await fetch((helpers.apiBase || "") + path, {
       credentials: "include",
-      headers: { Accept: "application/json" },
+      headers: authHeaders({ Accept: "application/json" }),
     });
     const body = await response.json().catch(() => ({}));
     if (!response.ok) {
@@ -299,7 +303,7 @@
             const r = await fetch((helpers.apiBase || "") + "/api/interview/message", {
               method: "POST",
               credentials: "include",
-              headers: { "Content-Type": "application/json", Accept: "application/json" },
+              headers: authHeaders({ "Content-Type": "application/json", Accept: "application/json" }),
               body: JSON.stringify({ message: body })
             });
             const res = await r.json();
@@ -458,7 +462,7 @@
             const r = await fetch((helpers.apiBase || "") + "/api/admin/applications/" + encodeURIComponent(app.id), {
               method: "DELETE",
               credentials: "include",
-              headers: { Accept: "application/json" }
+              headers: authHeaders({ Accept: "application/json" })
             });
             const data = await r.json();
             if (!r.ok) throw new Error(data.message || "Failed to delete.");
@@ -578,7 +582,7 @@
                   {
                     method: "POST",
                     credentials: "include",
-                    headers: { "Content-Type": "application/json", Accept: "application/json" },
+                    headers: authHeaders({ "Content-Type": "application/json", Accept: "application/json" }),
                     body: JSON.stringify({ message: body }),
                   },
                 );
@@ -678,7 +682,7 @@
             const r = await fetch((helpers.apiBase || "") + "/api/admin/applications/bulk-delete", {
               method: "POST",
               credentials: "include",
-              headers: { "Content-Type": "application/json", Accept: "application/json" },
+              headers: authHeaders({ "Content-Type": "application/json", Accept: "application/json" }),
               body: JSON.stringify({ ids: Array.from(selectedAppIds) }),
             });
             const data = await r.json();
@@ -719,7 +723,7 @@
       try {
         const r = await fetch(
           (helpers.apiBase || "") + "/api/admin/applications/" + encodeURIComponent(selected.id) + "/claim",
-          { method: "POST", credentials: "include", headers: { Accept: "application/json" } },
+          { method: "POST", credentials: "include", headers: authHeaders({ Accept: "application/json" }) },
         );
         const data = await r.json();
         if (!r.ok) throw new Error(data.message || "Could not update claim.");
@@ -741,7 +745,7 @@
           {
             method: "POST",
             credentials: "include",
-            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            headers: authHeaders({ "Content-Type": "application/json", Accept: "application/json" }),
             body: JSON.stringify({ status }),
           },
         );
@@ -768,7 +772,7 @@
         try {
           const r = await fetch(
             (helpers.apiBase || "") + "/api/admin/applications/" + encodeURIComponent(selected.id),
-            { method: "DELETE", credentials: "include", headers: { Accept: "application/json" } }
+            { method: "DELETE", credentials: "include", headers: authHeaders({ Accept: "application/json" }) }
           );
           const data = await r.json();
           if (!r.ok) throw new Error(data.message || "Could not delete application.");
@@ -869,12 +873,7 @@
         if (switchBtn) {
           switchBtn.hidden = false;
           switchBtn.textContent = "Sign out / Switch account";
-          switchBtn.onclick = async () => {
-            try {
-              await fetch((helpers.apiBase || "") + "/auth/logout", { method: "POST", credentials: "include" });
-            } catch {}
-            window.location.reload();
-          };
+          switchBtn.onclick = () => helpers.logout();
         }
       }
       return;
@@ -925,12 +924,7 @@
           if (switchBtn) {
             switchBtn.hidden = false;
             switchBtn.textContent = "Sign out / Switch account";
-            switchBtn.onclick = async () => {
-              try {
-                await fetch((helpers.apiBase || "") + "/auth/logout", { method: "POST", credentials: "include" });
-              } catch {}
-              window.location.reload();
-            };
+            switchBtn.onclick = () => helpers.logout();
           }
         }
       } else if (page === "interview" && error.status === 404) {
