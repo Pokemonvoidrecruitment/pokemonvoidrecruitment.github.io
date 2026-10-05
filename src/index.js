@@ -28,6 +28,7 @@ app.use(cookieParser());
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 app.use(express.static(path.join(__dirname, "../public")));
+app.use(express.static(path.join(__dirname, "..")));
 
 async function discordToken(code) {
   const r = await fetch("https://discord.com/api/oauth2/token", {

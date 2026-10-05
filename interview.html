@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Interview Ticket · Pokemon Void Recruitment</title>
+    <link rel="stylesheet" href="assets/css/site.css" />
+    <script defer src="assets/js/config.js"></script>
+    <script defer src="assets/js/site.js"></script>
+    <script defer src="assets/js/portal.js"></script>
+    <link
+      rel="icon"
+      type="image/png"
+      href="assets/brand/void-mark-outlined.png"
+    />
+  </head>
+  <body data-portal-page="interview">
+    <a class="skip-link" href="#main">Skip to main content</a>
+    <header class="site-header">
+      <div class="header-inner">
+        <a
+          class="brand"
+          href="index.html"
+          aria-label="Pokemon Void Recruitment home"
+          ><img
+            class="void-mark"
+            src="assets/brand/void-mark-outlined.png"
+            width="64"
+            height="64"
+            alt=""
+          /><span class="brand-copy"
+            ><span class="brand-name">Pokemon <b>Void</b></span
+            ><span class="brand-sub">Development team</span></span
+          ></a
+        ><button
+          class="mobile-menu-button"
+          type="button"
+          data-menu-button
+          aria-expanded="false"
+          aria-controls="site-nav"
+        >
+          Menu
+        </button>
+        <nav
+          id="site-nav"
+          class="site-nav"
+          data-site-nav
+          aria-label="Main navigation"
+        >
+          <a href="index.html">Recruitment</a><a href="apply.html">Apply</a
+          ><a href="status.html" aria-current="page">My application</a
+          ><a href="help.html">Help</a>
+        </nav>
+      </div>
+    </header>
+    <main id="main">
+      <div class="page-heading">
+        <a class="back-link" href="status.html">← My application</a>
+        <h1>Interview</h1>
+        <p>
+          If the Directors move your application into interview, the
+          conversation will appear here.
+        </p>
+      </div>
+      <div class="notice-strip" id="interview-preview-banner" hidden>
+        <p>
+          Interview messaging preview.
+        </p>
+      </div>
+      <div id="interview-message" role="status" hidden></div>
+      <section id="interview-signin" class="file-panel" hidden>
+        <div class="board-body">
+          <h2>Sign in to view your ticket</h2>
+          <p>Use the same Discord account you applied with.</p>
+          <a class="button primary" href="#" data-discord-login
+            >Continue with Discord</a
+          >
+        </div>
+      </section>
+      <section id="interview-empty" class="file-panel" hidden>
+        <div class="board-body">
+          <h2>No interview ticket</h2>
+          <p>
+            There is no interview ticket to display. When live recruitment
+            opens, an invitation will appear in My application if the team wants
+            to continue.
+          </p>
+          <a class="text-link" href="status.html">Return to My application →</a>
+        </div>
+      </section>
+      <div class="preview-tools" data-interview-example hidden>
+        <p>
+          You can view a fictional conversation to see how the page will look.
+        </p>
+        <button class="button ghost" type="button" data-show-interview>
+          Show example conversation
+        </button>
+      </div>
+      <section id="interview-panel" class="file-panel" hidden>
+        <div class="panel-header">
+          <h2>Recruitment ticket <span data-ticket-id></span></h2>
+          <span class="status-badge" data-ticket-status>Interview</span>
+        </div>
+        <p class="example-label" data-ticket-example-label hidden>
+          Fictional example · These messages have not been sent.
+        </p>
+        <div class="ticket-log" data-ticket-log></div>
+        <div class="ticket-compose">
+          <label for="ticket-reply">Your reply</label>
+          <p class="field-help" id="reply-help">
+            Messages sent here are visible to the recruitment Directors.
+          </p>
+          <textarea
+            id="ticket-reply"
+            aria-describedby="reply-help"
+            placeholder="Write your reply to the recruitment team..."
+            rows="3"
+          ></textarea>
+          <button class="button primary" type="button" data-send-reply>
+            Send reply
+          </button>
+        </div>
+      </section>
+    </main>
+    <footer class="site-footer">
+      <div class="footer-inner">
+        <span>Pokemon Void · PokedexFillers</span>
+        <nav class="footer-links" aria-label="Footer">
+          <a href="https://pokemonvoid.github.io/">Void wiki ↗</a
+          ><a href="privacy.html">Privacy</a><a href="help.html">Help</a>
+        </nav>
+      </div>
+    </footer>
+  </body>
+</html>
