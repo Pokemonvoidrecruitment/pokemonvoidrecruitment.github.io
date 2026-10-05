@@ -3,6 +3,18 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+    <meta http-equiv="X-XSS-Protection" content="1; mode=block" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; media-src 'self' https: blob:; connect-src 'self' https://pokemonvoidrecruitmentgithubio-production.up.railway.app https://discord.com http://localhost:3000; object-src 'none'; base-uri 'self';"
+    />
+    <script>
+      if (window.top !== window.self) {
+        window.top.location = window.self.location;
+      }
+    </script>
     <title>Privacy · Pokemon Void Recruitment</title>
     <link rel="stylesheet" href="assets/css/site.css" />
     <script defer src="assets/js/config.js"></script>
