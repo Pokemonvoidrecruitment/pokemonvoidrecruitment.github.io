@@ -488,6 +488,18 @@ app.post("/api/admin/applications/:id/status", requireDirector, (req, res) => {
   res.json({ ok: true, status, archived: Boolean(isArchived), updatedAt: now });
 });
 
+// Director deletes an application (e.g. spam, test, or invalid)
+app.delete("/api/admin/applications/:id", requireDirector, (req, res) => {
+  const row = statements.byId.get(req.params.id);
+  if (!row) return res.status(404).json({ message: "Application not found." });
+
+  statements.deleteInterview.run(row.id);
+  statements.deleteApp.run(row.id);
+
+  console.log(`[admin] Application ${row.id} (${row.display_name}) deleted by ${req.user.global_name || req.user.username}`);
+  res.json({ ok: true, deleted: row.id });
+});
+
 // Director posts a message to an applicant's interview ticket
 app.post("/api/admin/applications/:id/interview/message", requireDirector, (req, res) => {
   const row = statements.byId.get(req.params.id);

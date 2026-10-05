@@ -37,6 +37,9 @@ export const config = {
     applicantDMs: process.env.APPLICANT_DMS !== "false"
   },
   internalEventSecret: clean(process.env.INTERNAL_EVENT_SECRET || "dev-internal-secret"),
-  dbPath: clean(process.env.DB_PATH || "./data/recruitment.sqlite")
+  dbPath: clean(
+    process.env.DB_PATH ||
+    (process.env.RAILWAY_VOLUME_MOUNT_PATH ? `${process.env.RAILWAY_VOLUME_MOUNT_PATH}/recruitment.sqlite` : "./data/recruitment.sqlite")
+  )
 };
 

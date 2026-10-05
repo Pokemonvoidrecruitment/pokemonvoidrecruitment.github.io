@@ -50,7 +50,9 @@ export const statements = {
   deleteSession: db.prepare(`DELETE FROM sessions WHERE token_hash=?`),
   cleanExpiredSessions: db.prepare(`DELETE FROM sessions WHERE datetime(expires_at) < datetime('now')`),
   interview: db.prepare(`SELECT * FROM interviews WHERE application_id=?`),
-  saveInterview: db.prepare(`INSERT OR REPLACE INTO interviews(application_id,status,messages_json,updated_at) VALUES(?,?,?,?)`)
+  saveInterview: db.prepare(`INSERT OR REPLACE INTO interviews(application_id,status,messages_json,updated_at) VALUES(?,?,?,?)`),
+  deleteApp: db.prepare(`DELETE FROM applications WHERE id=?`),
+  deleteInterview: db.prepare(`DELETE FROM interviews WHERE application_id=?`)
 };
 
 export function appView(row) {

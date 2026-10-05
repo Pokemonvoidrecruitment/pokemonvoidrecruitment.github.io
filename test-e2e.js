@@ -84,6 +84,12 @@ async function run() {
   });
   console.log("   Applicant reply sent. Total in thread:", r.json.ticket?.messages?.length);
 
+  console.log("12. Director deletes application...");
+  cookies = "";
+  await request("/auth/dev/login?role=director");
+  r = await request(`/api/admin/applications/${appId}`, { method: "DELETE" });
+  console.log("   Director delete result:", r.status, r.json);
+
   console.log("ALL TESTS PASSED SUCCESSFULLY!");
 }
 

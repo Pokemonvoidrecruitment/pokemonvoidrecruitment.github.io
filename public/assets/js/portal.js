@@ -564,12 +564,53 @@
         text("[data-detail-feedback]", e.message);
       }
     });
+
+    const deleteBtn = $("[data-delete-application]");
+    if (deleteBtn && !deleteBtn.dataset.wired) {
+      deleteBtn.dataset.wired = "true";
+      deleteBtn.addEventListener("click", async () => {
+        if (!selected) return;
+        const confirmDelete = window.confirm(`Are you sure you want to permanently delete application ${selected.id} (${selected.displayName || "Applicant"})? This action cannot be undone.`);
+        if (!confirmDelete) return;
+
+        deleteBtn.disabled = true;
+        try {
+          const r = await fetch(
+            (helpers.apiBase || "") + "/api/admin/applications/" + encodeURIComponent(selected.id),
+            { method: "DELETE", credentials: "include", headers: { Accept: "application/json" } }
+          );
+          const data = await r.json();
+          if (!r.ok) throw new Error(data.message || "Could not delete application.");
+          $("#director-detail").hidden = true;
+          selected = null;
+          await loadLivePage();
+          alert(`Application ${data.deleted} has been permanently deleted.`);
+        } catch (e) {
+          alert("Delete failed: " + e.message);
+        } finally {
+          deleteBtn.disabled = false;
+        }
+      });
+    }
   }
 
   function previewAdmin() {
     message(
       "Preview workspace — fictional applications only. Changes stay on this page and reset when you reload.",
     );
+    const deleteBtn = $("[data-delete-application]");
+    if (deleteBtn && !deleteBtn.dataset.wiredPreview) {
+      deleteBtn.dataset.wiredPreview = "true";
+      deleteBtn.addEventListener("click", () => {
+        if (!selected) return;
+        if (confirm(`Delete application ${selected.id}?`)) {
+          applications = applications.filter((a) => a.id !== selected.id);
+          $("#director-detail").hidden = true;
+          selected = null;
+          renderQueue();
+        }
+      });
+    }
     applications = [
       {
         id: "EXAMPLE-01",
