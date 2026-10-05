@@ -10,6 +10,8 @@ import { db, statements, appView, deleteApplications } from "./db.js";
 import { randomToken, sha256, sign, safeEqual } from "./security.js";
 import { EmbedBuilder } from "discord.js";
 import { startDiscord, isDirector, notifyDirectors, dmApplicant } from "./discord.js";
+import multer from "multer";
+import fs from "node:fs";
 
 const app = express();
 app.set("trust proxy", 1);
@@ -78,6 +80,42 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const staticOpts = { extensions: ["html"], dotfiles: "deny" };
 app.use(express.static(path.join(__dirname, "../public"), staticOpts));
 app.use(express.static(path.join(__dirname, ".."), staticOpts));
+
+// File uploads directory for interview attachments (.aseprite, audio, .rxdata, .dat, etc.)
+const uploadsDir = path.resolve(
+  process.env.RAILWAY_VOLUME_MOUNT_PATH
+    ? path.join(process.env.RAILWAY_VOLUME_MOUNT_PATH, "uploads")
+    : path.join(__dirname, "../data/uploads")
+);
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, uploadsDir),
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    const base = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9_\-\.]/g, "_").slice(0, 50) || "file";
+    const unique = `${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
+    cb(null, `${base}-${unique}${ext}`);
+  }
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
+  fileFilter: (_req, file, cb) => {
+    const allowed = /\.(aseprite|ase|mp3|wav|ogg|flac|m4a|aac|opus|mid|midi|rxdata|dat|png|jpe?g|gif|webp|bmp|svg|mp4|webm|mov|zip|rar|7z|tar|gz|rb|txt|json|pdf)$/i;
+    if (allowed.test(file.originalname)) {
+      cb(null, true);
+    } else {
+      cb(new Error(`File type not supported (${path.extname(file.originalname)}). Supported: Aseprite (.aseprite/.ase), Audio (.mp3/.wav/.ogg/.flac), .rxdata, .dat, images, video, zip.`));
+    }
+  }
+});
+
+// Serve uploaded interview files
+app.use("/uploads", express.static(uploadsDir, { maxAge: "7d", dotfiles: "deny" }));
 
 async function discordToken(code) {
   const credentials = Buffer.from(`${config.discord.clientId}:${config.discord.clientSecret}`).toString("base64");
@@ -417,16 +455,27 @@ app.get("/api/interview", requireUser, (req, res) => {
   });
 });
 
-// Applicant posts a message to their interview ticket
-app.post("/api/interview/message", requireUser, (req, res) => {
+// Applicant posts a message or file to their interview ticket
+app.post("/api/interview/message", requireUser, (req, res, next) => {
+  upload.array("files", 5)(req, res, (err) => {
+    if (err) return res.status(400).json({ message: err.message });
+    next();
+  });
+}, (req, res) => {
   const row = statements.byDiscord.get(req.user.discord_user_id);
   if (!row) return res.status(404).json({ message: "No application found." });
   const ticket = statements.interview.get(row.id);
   if (!ticket) return res.status(404).json({ message: "No active interview ticket found." });
 
-  const text = (req.body?.message || "").trim();
-  if (!text) return res.status(400).json({ message: "Message cannot be empty." });
-  if (text.length > 2000) return res.status(400).json({ message: "Message is too long (maximum 2000 characters)." });
+  let text = (req.body?.message || "").trim();
+  if (req.files && req.files.length > 0) {
+    const cleanOrigin = (config.publicBaseUrl || "https://pokemonvoidrecruitmentgithubio-production.up.railway.app").replace(/\/$/, "");
+    const fileUrls = req.files.map(f => `${cleanOrigin}/uploads/${f.filename}`).join("\n");
+    text = text ? `${text}\n${fileUrls}` : fileUrls;
+  }
+
+  if (!text) return res.status(400).json({ message: "Message or file attachment is required." });
+  if (text.length > 4000) return res.status(400).json({ message: "Message is too long (maximum 4000 characters)." });
 
   let messages = [];
   try { messages = JSON.parse(ticket.messages_json); } catch {}
@@ -584,7 +633,12 @@ app.post("/api/admin/applications/bulk-delete", requireDirector, (req, res) => {
 });
 
 // Director posts a message to an applicant's interview ticket
-app.post("/api/admin/applications/:id/interview/message", requireDirector, (req, res) => {
+app.post("/api/admin/applications/:id/interview/message", requireDirector, (req, res, next) => {
+  upload.array("files", 5)(req, res, (err) => {
+    if (err) return res.status(400).json({ message: err.message });
+    next();
+  });
+}, (req, res) => {
   const row = statements.byId.get(req.params.id);
   if (!row) return res.status(404).json({ message: "Application not found." });
 
@@ -595,9 +649,20 @@ app.post("/api/admin/applications/:id/interview/message", requireDirector, (req,
     ticket = statements.interview.get(row.id);
   }
 
-  const text = (req.body?.message || "").trim();
-  if (!text) return res.status(400).json({ message: "Message cannot be empty." });
-  if (text.length > 2000) return res.status(400).json({ message: "Message is too long (maximum 2000 characters)." });
+  let text = (req.body?.message || "").trim();
+  let discordFiles = [];
+  if (req.files && req.files.length > 0) {
+    const cleanOrigin = (config.publicBaseUrl || "https://pokemonvoidrecruitmentgithubio-production.up.railway.app").replace(/\/$/, "");
+    const fileUrls = req.files.map(f => `${cleanOrigin}/uploads/${f.filename}`).join("\n");
+    text = text ? `${text}\n${fileUrls}` : fileUrls;
+    discordFiles = req.files.map(f => ({
+      attachment: f.path,
+      name: f.originalname
+    }));
+  }
+
+  if (!text) return res.status(400).json({ message: "Message or file attachment is required." });
+  if (text.length > 4000) return res.status(400).json({ message: "Message is too long (maximum 4000 characters)." });
 
   let messages = [];
   try { messages = JSON.parse(ticket.messages_json); } catch {}
@@ -615,7 +680,8 @@ app.post("/api/admin/applications/:id/interview/message", requireDirector, (req,
   statements.saveInterview.run(row.id, ticket.status, JSON.stringify(messages), updatedNow);
 
   dmApplicant(row.discord_user_id, {
-    content: `💬 **[Director]**\n${text}`
+    content: `💬 **[Director]**\n${text}`,
+    ...(discordFiles.length ? { files: discordFiles } : {})
   });
 
   res.json({

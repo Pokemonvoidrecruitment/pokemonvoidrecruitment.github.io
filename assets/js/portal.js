@@ -42,8 +42,62 @@
     const url = apiUrl(path);
     const opts = Object.assign({}, options);
     opts.credentials = "include";
-    opts.headers = authHeaders(opts.headers || { Accept: "application/json" });
+    const headers = Object.assign({}, opts.headers || { Accept: "application/json" });
+    if (opts.body instanceof FormData) {
+      delete headers["Content-Type"];
+    }
+    opts.headers = authHeaders(headers);
     return fetch(url, opts);
+  }
+
+  function formatFileSize(bytes) {
+    if (!bytes) return "0 B";
+    const k = 1024;
+    const sizes = ["B", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
+  }
+
+  function getFileIcon(name) {
+    const ext = (name || "").split(".").pop().toLowerCase();
+    if (["aseprite", "ase"].includes(ext)) return "🎨";
+    if (["mp3", "wav", "ogg", "flac", "m4a", "aac", "opus", "mid", "midi"].includes(ext)) return "🎵";
+    if (ext === "rxdata") return "🗺️";
+    if (ext === "dat") return "🎬";
+    if (["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"].includes(ext)) return "🖼️";
+    if (["mp4", "webm", "mov"].includes(ext)) return "🎥";
+    if (["zip", "rar", "7z", "tar", "gz"].includes(ext)) return "📦";
+    return "📄";
+  }
+
+  function renderSelectedFiles(filesList, container, onRemove) {
+    if (!container) return;
+    container.innerHTML = "";
+    filesList.forEach((file, index) => {
+      const chip = document.createElement("div");
+      chip.style.cssText = "display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; background: rgba(30, 41, 59, 0.85); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 6px; font-size: 12px; color: #f1f5f9; max-width: 280px;";
+      
+      const icon = document.createElement("span");
+      icon.textContent = getFileIcon(file.name);
+      
+      const label = document.createElement("span");
+      label.style.cssText = "overflow: hidden; text-overflow: ellipsis; white-space: nowrap;";
+      label.textContent = `${file.name} (${formatFileSize(file.size)})`;
+      label.title = file.name;
+      
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.style.cssText = "background: none; border: none; color: #ef4444; cursor: pointer; font-size: 13px; line-height: 1; padding: 0 2px;";
+      removeBtn.textContent = "✕";
+      removeBtn.title = "Remove file";
+      removeBtn.onclick = (e) => {
+        e.preventDefault();
+        if (onRemove) onRemove(index);
+      };
+      
+      chip.append(icon, label, removeBtn);
+      container.append(chip);
+    });
   }
 
   let applicantPollInterval = null;
@@ -206,11 +260,21 @@
     container.className = "ticket-body";
     if (!rawText) return container;
 
-    // 1. Extract media URLs first
-    const mediaNodes = [];
+    // 1. Extract media & file attachments
+    const attachmentNodes = [];
     const urlPattern = /(https?:\/\/[^\s<]+)/gi;
 
-    const isMediaUrl = (url) => {
+    function getFileName(url) {
+      try {
+        const pathname = new URL(url).pathname;
+        const decoded = decodeURIComponent(pathname.split("/").pop() || "file");
+        return decoded.replace(/-\d{10,14}-[a-f0-9]{4,12}(\.[a-zA-Z0-9]+)$/i, "$1") || decoded;
+      } catch {
+        return "attachment";
+      }
+    }
+
+    const classifyUrl = (url) => {
       const cleanUrl = url.split("?")[0].toLowerCase();
       const isImg = /\.(png|jpe?g|gif|webp|bmp|svg|tiff)$/i.test(cleanUrl) ||
         /cdn\.discordapp\.com\/attachments\/.*\.(png|jpe?g|gif|webp|bmp|svg)/i.test(url) ||
@@ -218,13 +282,24 @@
         /media\.tenor\.com\/.*\.gif/i.test(url) ||
         /media\.giphy\.com\/.*\.gif/i.test(url) ||
         /i\.imgur\.com\/.*\.(png|jpe?g|gif|webp)/i.test(url);
-      const isVideo = /\.(mp4|webm|mov|m4v|ogg)$/i.test(cleanUrl) ||
+      const isVideo = /\.(mp4|webm|mov|m4v)$/i.test(cleanUrl) ||
         /cdn\.discordapp\.com\/attachments\/.*\.(mp4|webm|mov|m4v)/i.test(url) ||
         /media\.discordapp\.net\/attachments\/.*\.(mp4|webm|mov|m4v)/i.test(url);
-      return { isImg, isVideo };
+      const isAudio = /\.(mp3|wav|ogg|flac|m4a|aac|opus|mid|midi)$/i.test(cleanUrl) ||
+        /cdn\.discordapp\.com\/attachments\/.*\.(mp3|wav|ogg|flac|m4a|aac|opus|mid|midi)/i.test(url);
+      const isAseprite = /\.(aseprite|ase)$/i.test(cleanUrl) ||
+        /cdn\.discordapp\.com\/attachments\/.*\.(aseprite|ase)/i.test(url);
+      const isRxdata = /\.rxdata$/i.test(cleanUrl) ||
+        /cdn\.discordapp\.com\/attachments\/.*\.rxdata/i.test(url);
+      const isDat = /\.dat$/i.test(cleanUrl) ||
+        /cdn\.discordapp\.com\/attachments\/.*\.dat/i.test(url);
+      const isArchive = /\.(zip|rar|7z|tar|gz|rb|json|txt|pdf)$/i.test(cleanUrl) ||
+        /cdn\.discordapp\.com\/attachments\/.*\.(zip|rar|7z|tar|gz|rb|json|txt|pdf)/i.test(url);
+
+      return { isImg, isVideo, isAudio, isAseprite, isRxdata, isDat, isArchive };
     };
 
-    // Remove media URLs from text and collect their HTML elements
+    // Remove media & file URLs from text and collect their HTML elements
     let stripped = String(rawText).replace(urlPattern, (matchedUrl) => {
       let url = matchedUrl;
       let trailingPunct = "";
@@ -233,18 +308,97 @@
         trailingPunct = matchPunct[0];
         url = url.slice(0, -trailingPunct.length);
       }
-      const { isImg, isVideo } = isMediaUrl(url);
-      if (isImg) {
-        mediaNodes.push(
+      const c = classifyUrl(url);
+      if (c.isImg) {
+        attachmentNodes.push(
           `<a href="${url}" target="_blank" rel="noopener noreferrer" style="display:inline-block; margin-top:8px; margin-right:8px;"><img class="ticket-media-img" src="${url}" loading="lazy" alt="Image" style="max-width: 100%; max-height: 400px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); display: block;" onerror="this.onerror=null;this.style.display='none';"></a>`
         );
-        return ""; // Do not show the link in the message text!
+        return "";
       }
-      if (isVideo) {
-        mediaNodes.push(
+      if (c.isVideo) {
+        attachmentNodes.push(
           `<div style="margin-top:8px;"><video class="ticket-media-video" controls playsinline src="${url}" preload="metadata" style="max-width: 100%; max-height: 400px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); display: block;"></video></div>`
         );
-        return ""; // Do not show the link in the message text!
+        return "";
+      }
+      if (c.isAudio) {
+        const name = getFileName(url);
+        attachmentNodes.push(
+          `<div class="ticket-file-card ticket-audio-card" style="margin-top:8px; padding:12px 14px; background:rgba(15, 23, 42, 0.75); border:1px solid #38bdf8; border-radius:10px; display:flex; flex-direction:column; gap:8px; max-width:480px;">` +
+            `<div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">` +
+              `<span style="font-size:13px; font-weight:600; color:#38bdf8; display:flex; align-items:center; gap:6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">` +
+                `🎵 <span title="${name}">${name}</span>` +
+              `</span>` +
+              `<a href="${url}" download="${name}" target="_blank" rel="noopener noreferrer" class="button ghost" style="padding:3px 10px; font-size:11px; text-decoration:none; white-space:nowrap; border-color:#38bdf8; color:#e0f2fe;">Download ⬇</a>` +
+            `</div>` +
+            `<audio controls preload="metadata" src="${url}" style="width:100%; height:36px; outline:none; border-radius:4px;"></audio>` +
+          `</div>`
+        );
+        return "";
+      }
+      if (c.isAseprite) {
+        const name = getFileName(url);
+        attachmentNodes.push(
+          `<div class="ticket-file-card ticket-aseprite-card" style="margin-top:8px; padding:12px 14px; background:rgba(30, 27, 75, 0.65); border:1px solid #818cf8; border-radius:10px; display:flex; align-items:center; justify-content:space-between; gap:12px; max-width:480px;">` +
+            `<div style="display:flex; align-items:center; gap:10px; min-width:0;">` +
+              `<span style="font-size:24px; line-height:1;">🎨</span>` +
+              `<div style="min-width:0;">` +
+                `<div style="font-size:13px; font-weight:600; color:#e0e7ff; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${name}">${name}</div>` +
+                `<div style="font-size:11px; color:#a5b4fc;">Aseprite Sprite File · Spriter Asset</div>` +
+              `</div>` +
+            `</div>` +
+            `<a href="${url}" download="${name}" target="_blank" rel="noopener noreferrer" class="button primary" style="padding:4px 12px; font-size:12px; text-decoration:none; white-space:nowrap; background:#6366f1; border-color:#6366f1; color:#fff;">Download ⬇</a>` +
+          `</div>`
+        );
+        return "";
+      }
+      if (c.isRxdata) {
+        const name = getFileName(url);
+        attachmentNodes.push(
+          `<div class="ticket-file-card ticket-rxdata-card" style="margin-top:8px; padding:12px 14px; background:rgba(19, 78, 74, 0.6); border:1px solid #2dd4bf; border-radius:10px; display:flex; align-items:center; justify-content:space-between; gap:12px; max-width:480px;">` +
+            `<div style="display:flex; align-items:center; gap:10px; min-width:0;">` +
+              `<span style="font-size:24px; line-height:1;">🗺️</span>` +
+              `<div style="min-width:0;">` +
+                `<div style="font-size:13px; font-weight:600; color:#ccfbf1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${name}">${name}</div>` +
+                `<div style="font-size:11px; color:#5eead4;">RPG Maker XP / Essentials Map File (.rxdata)</div>` +
+              `</div>` +
+            `</div>` +
+            `<a href="${url}" download="${name}" target="_blank" rel="noopener noreferrer" class="button primary" style="padding:4px 12px; font-size:12px; text-decoration:none; white-space:nowrap; background:#0d9488; border-color:#0d9488; color:#fff;">Download ⬇</a>` +
+          `</div>`
+        );
+        return "";
+      }
+      if (c.isDat) {
+        const name = getFileName(url);
+        attachmentNodes.push(
+          `<div class="ticket-file-card ticket-dat-card" style="margin-top:8px; padding:12px 14px; background:rgba(120, 53, 15, 0.5); border:1px solid #f59e0b; border-radius:10px; display:flex; align-items:center; justify-content:space-between; gap:12px; max-width:480px;">` +
+            `<div style="display:flex; align-items:center; gap:10px; min-width:0;">` +
+              `<span style="font-size:24px; line-height:1;">🎬</span>` +
+              `<div style="min-width:0;">` +
+                `<div style="font-size:13px; font-weight:600; color:#fef3c7; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${name}">${name}</div>` +
+                `<div style="font-size:11px; color:#fcd34d;">Animation / Move Data (.dat) · Move Animators</div>` +
+              `</div>` +
+            `</div>` +
+            `<a href="${url}" download="${name}" target="_blank" rel="noopener noreferrer" class="button primary" style="padding:4px 12px; font-size:12px; text-decoration:none; white-space:nowrap; background:#d97706; border-color:#d97706; color:#fff;">Download ⬇</a>` +
+          `</div>`
+        );
+        return "";
+      }
+      if (c.isArchive) {
+        const name = getFileName(url);
+        attachmentNodes.push(
+          `<div class="ticket-file-card ticket-archive-card" style="margin-top:8px; padding:12px 14px; background:rgba(30, 41, 59, 0.65); border:1px solid #64748b; border-radius:10px; display:flex; align-items:center; justify-content:space-between; gap:12px; max-width:480px;">` +
+            `<div style="display:flex; align-items:center; gap:10px; min-width:0;">` +
+              `<span style="font-size:24px; line-height:1;">📦</span>` +
+              `<div style="min-width:0;">` +
+                `<div style="font-size:13px; font-weight:600; color:#f1f5f9; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${name}">${name}</div>` +
+                `<div style="font-size:11px; color:#94a3b8;">Asset Archive / Project Document</div>` +
+              `</div>` +
+            `</div>` +
+            `<a href="${url}" download="${name}" target="_blank" rel="noopener noreferrer" class="button ghost" style="padding:4px 12px; font-size:12px; text-decoration:none; white-space:nowrap; border-color:#64748b; color:#f1f5f9;">Download ⬇</a>` +
+          `</div>`
+        );
+        return "";
       }
       // Non-media URL: protect with placeholder
       return `###URL_TOKEN:${encodeURIComponent(url)}###` + trailingPunct;
@@ -269,8 +423,8 @@
     });
 
     safe = safe.trim().replace(/\n/g, "<br>");
-    const mediaHtml = mediaNodes.length ? `<div class="ticket-media-group" style="margin-top: ${safe ? '8px' : '0'};">${mediaNodes.join("")}</div>` : "";
-    container.innerHTML = (safe ? `<div>${safe}</div>` : "") + mediaHtml;
+    const attachmentHtml = attachmentNodes.length ? `<div class="ticket-attachments-group" style="margin-top: ${safe ? '8px' : '0'}; display:flex; flex-direction:column; gap:8px;">${attachmentNodes.join("")}</div>` : "";
+    container.innerHTML = (safe ? `<div>${safe}</div>` : "") + attachmentHtml;
     return container;
   }
 
@@ -302,26 +456,67 @@
       log.append(empty);
     }
 
-    // Wire up applicant reply sending
+    // Wire up applicant reply sending with file attachments
     if (!example) {
       const replyBtn = $("[data-send-reply]");
       const replyInput = $("#ticket-reply");
+      const fileInput = $("#ticket-file-input");
+      const fileList = $("#ticket-file-list");
+      let attachedFiles = [];
+
+      const updateChips = () => {
+        renderSelectedFiles(attachedFiles, fileList, (idx) => {
+          attachedFiles.splice(idx, 1);
+          updateChips();
+        });
+      };
+
+      if (fileInput && !fileInput.dataset.wired) {
+        fileInput.dataset.wired = "true";
+        fileInput.addEventListener("change", () => {
+          if (fileInput.files && fileInput.files.length) {
+            for (let i = 0; i < fileInput.files.length; i++) {
+              if (attachedFiles.length < 5) {
+                attachedFiles.push(fileInput.files[i]);
+              }
+            }
+            fileInput.value = "";
+            updateChips();
+          }
+        });
+      }
+
       if (replyBtn && replyInput && !replyBtn.dataset.wired) {
         replyBtn.dataset.wired = "true";
         replyBtn.addEventListener("click", async () => {
           const body = replyInput.value.trim();
-          if (!body) return;
+          if (!body && !attachedFiles.length) return;
           replyBtn.disabled = true;
           replyBtn.textContent = "Sending…";
           try {
-            const r = await apiFetch("/api/interview/message", {
-              method: "POST",
-              headers: { "Content-Type": "application/json", Accept: "application/json" },
-              body: JSON.stringify({ message: body })
-            });
+            let r;
+            if (attachedFiles.length > 0) {
+              const formData = new FormData();
+              if (body) formData.append("message", body);
+              for (const file of attachedFiles) {
+                formData.append("files", file);
+              }
+              r = await apiFetch("/api/interview/message", {
+                method: "POST",
+                body: formData,
+              });
+            } else {
+              r = await apiFetch("/api/interview/message", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Accept: "application/json" },
+                body: JSON.stringify({ message: body })
+              });
+            }
             const res = await r.json();
             if (!r.ok) throw new Error(res.message || "Failed to send message.");
             replyInput.value = "";
+            attachedFiles = [];
+            updateChips();
             renderTicket(res.ticket, false);
           } catch (err) {
             alert(err.message);
@@ -581,30 +776,76 @@
           renderDirectorInterview(detail.interview || { messages: [] });
           pollDirectorInterview(selected.id);
 
+          const dirFileInput = $("#director-file-input");
+          const dirFileList = $("#director-file-list");
+          let directorAttachedFiles = [];
+
+          const updateDirChips = () => {
+            renderSelectedFiles(directorAttachedFiles, dirFileList, (idx) => {
+              directorAttachedFiles.splice(idx, 1);
+              updateDirChips();
+            });
+          };
+
+          if (dirFileInput && !dirFileInput.dataset.wired) {
+            dirFileInput.dataset.wired = "true";
+            dirFileInput.addEventListener("change", () => {
+              if (dirFileInput.files && dirFileInput.files.length) {
+                for (let i = 0; i < dirFileInput.files.length; i++) {
+                  if (directorAttachedFiles.length < 5) {
+                    directorAttachedFiles.push(dirFileInput.files[i]);
+                  }
+                }
+                dirFileInput.value = "";
+                updateDirChips();
+              }
+            });
+          }
+
           if (directorSendBtn && !directorSendBtn.dataset.wired) {
             directorSendBtn.dataset.wired = "true";
             directorSendBtn.addEventListener("click", async () => {
               const body = directorReplyInput.value.trim();
-              if (!body || !selected) return;
+              if (!body && !directorAttachedFiles.length || !selected) return;
               directorSendBtn.disabled = true;
+              directorSendBtn.textContent = "Sending…";
               try {
-                const r = await apiFetch(
-                  "/api/admin/applications/" + encodeURIComponent(selected.id) + "/interview/message",
-                  {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json", Accept: "application/json" },
-                    body: JSON.stringify({ message: body }),
-                  },
-                );
+                let r;
+                if (directorAttachedFiles.length > 0) {
+                  const formData = new FormData();
+                  if (body) formData.append("message", body);
+                  for (const file of directorAttachedFiles) {
+                    formData.append("files", file);
+                  }
+                  r = await apiFetch(
+                    "/api/admin/applications/" + encodeURIComponent(selected.id) + "/interview/message",
+                    {
+                      method: "POST",
+                      body: formData,
+                    }
+                  );
+                } else {
+                  r = await apiFetch(
+                    "/api/admin/applications/" + encodeURIComponent(selected.id) + "/interview/message",
+                    {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json", Accept: "application/json" },
+                      body: JSON.stringify({ message: body }),
+                    }
+                  );
+                }
                 const res = await r.json();
                 if (!r.ok) throw new Error(res.message || "Could not send message.");
                 directorReplyInput.value = "";
+                directorAttachedFiles = [];
+                updateDirChips();
                 renderDirectorInterview(res.ticket);
                 selected.interview = res.ticket;
               } catch (err) {
                 alert(err.message);
               } finally {
                 directorSendBtn.disabled = false;
+                directorSendBtn.textContent = "Send message";
               }
             });
           }

@@ -108,7 +108,7 @@
         <div class="ticket-compose">
           <label for="ticket-reply">Your reply</label>
           <p class="field-help" id="reply-help">
-            Messages sent here are visible to the recruitment Directors.
+            Messages sent here are visible to the recruitment Directors. You can attach Aseprite files (.aseprite), audio (.wav, .mp3, .ogg), .rxdata, .dat, images, or archives.
           </p>
           <textarea
             id="ticket-reply"
@@ -116,6 +116,16 @@
             placeholder="Write your reply to the recruitment team..."
             rows="3"
           ></textarea>
+          <div class="ticket-attach-tray" style="display: flex; flex-direction: column; gap: 8px; margin: 8px 0;">
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+              <label class="button ghost" style="cursor: pointer; display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; font-size: 13px;">
+                📎 <span>Attach file</span>
+                <input type="file" id="ticket-file-input" multiple accept=".aseprite,.ase,.mp3,.wav,.ogg,.flac,.m4a,.aac,.opus,.mid,.midi,.rxdata,.dat,.png,.jpg,.jpeg,.gif,.webp,.bmp,.mp4,.webm,.mov,.zip,.rar,.7z,.tar,.gz,.rb,.txt,.json,.pdf" style="display: none;">
+              </label>
+              <span style="font-size: 12px; color: #94a3b8;">Supported: .aseprite, audio (.wav, .mp3, .ogg), .rxdata, .dat, images, zip (up to 50MB)</span>
+            </div>
+            <div id="ticket-file-list" style="display: flex; flex-wrap: wrap; gap: 6px;"></div>
+          </div>
           <button class="button primary" type="button" data-send-reply>
             Send reply
           </button>
