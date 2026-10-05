@@ -17,13 +17,18 @@
   const storage = {
     read() {
       try {
-        return JSON.parse(sessionStorage.getItem(key));
+        const local = localStorage.getItem(key);
+        if (local) return JSON.parse(local);
+        const session = sessionStorage.getItem(key);
+        if (session) return JSON.parse(session);
+        return null;
       } catch {
         return null;
       }
     },
     write(data) {
       try {
+        localStorage.setItem(key, JSON.stringify(data));
         sessionStorage.setItem(key, JSON.stringify(data));
         return true;
       } catch {
@@ -32,6 +37,7 @@
     },
     clear() {
       try {
+        localStorage.removeItem(key);
         sessionStorage.removeItem(key);
       } catch {}
     },
@@ -436,6 +442,7 @@
       button = document.querySelector("[data-submit-application]");
     const session = await helpers.loadSession();
     if (!session?.user) {
+      saveDraft();
       message.className = "notice-strip error";
       message.innerHTML = 'Discord sign-in is required to submit your application. Please <a href="' + helpers.loginUrl(window.location.href) + '" class="text-link">sign in with Discord</a> to continue.';
       message.hidden = false;
@@ -598,10 +605,74 @@
       "Finish preview checks your answers and keeps your draft in this tab. Nothing will be sent.";
     stepFor(5).dataset.stepTitle = "Review your answers";
   }
+  async function initAuthGate() {
+    const authGate = document.getElementById("apply-auth-gate");
+    const existingAlert = document.getElementById("apply-existing-alert");
+    const rail = document.querySelector(".step-rail");
+    const session = await (helpers.loadSession ? helpers.loadSession() : null);
+
+    if (!session?.user) {
+      if (authGate) {
+        authGate.hidden = false;
+        const loginBtn = authGate.querySelector("[data-discord-login]");
+        if (loginBtn) {
+          loginBtn.href = helpers.loginUrl ? helpers.loginUrl(window.location.href) : "#";
+        }
+      }
+      form.hidden = true;
+      if (rail) {
+        rail.style.opacity = "0.4";
+        rail.style.pointerEvents = "none";
+      }
+      return;
+    }
+
+    // Authenticated! Unhide the form and re-enable rail
+    if (authGate) authGate.hidden = true;
+    form.hidden = false;
+    if (rail) {
+      rail.style.opacity = "1";
+      rail.style.pointerEvents = "auto";
+    }
+
+    // Auto-fill preferred name if field is empty
+    const nameField = form.querySelector('input[name="name"]');
+    if (nameField && !nameField.value.trim()) {
+      const preferred = session.user.globalName || session.user.username || "";
+      if (preferred) {
+        nameField.value = preferred;
+        dirty = true;
+        saveDraft();
+      }
+    }
+
+    // Check if user already has an active application
+    try {
+      const statusUrl = helpers.apiUrl ? helpers.apiUrl("/api/application/status") : (helpers.apiBase + "/api/application/status");
+      const r = await fetch(statusUrl, {
+        headers: helpers.getAuthHeaders ? helpers.getAuthHeaders() : {},
+        credentials: "include"
+      });
+      if (r.ok) {
+        const res = await r.json();
+        if (res.application) {
+          if (existingAlert) {
+            existingAlert.hidden = false;
+            const desc = document.getElementById("existing-app-desc");
+            if (desc) {
+              desc.textContent = `You already have an active application (${res.application.id}) currently in '${res.application.status}' stage. Check your status desk or wait for review.`;
+            }
+          }
+        }
+      }
+    } catch {}
+  }
+
   showStep(currentStep, false, false);
   history.replaceState(
     { step: currentStep },
     "",
     location.pathname + "#section-" + currentStep,
   );
+  initAuthGate();
 })();

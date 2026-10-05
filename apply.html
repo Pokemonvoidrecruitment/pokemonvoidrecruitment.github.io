@@ -196,11 +196,39 @@
             >
           </div>
           <div
-            data-site-message
+            id="apply-auth-gate"
             class="notice-strip info"
-            role="status"
             hidden
-          ></div>
+            style="margin-bottom: 24px; padding: 24px 20px; background: rgba(30, 41, 59, 0.85); border: 1px solid #5865F2; border-radius: 12px; text-align: center;"
+          >
+            <div style="font-size: 32px; margin-bottom: 10px;">🔑</div>
+            <h2 style="font-size: 20px; font-weight: 700; margin-bottom: 8px; color: #f8fafc;">
+              Discord Authorization Required
+            </h2>
+            <p style="color: #cbd5e1; font-size: 14px; max-width: 520px; margin: 0 auto 18px; line-height: 1.5;">
+              Please connect your Discord account before filling out the application. This ensures your progress is saved to your account and allows the recruitment directors to reach out to you for interview tickets.
+            </p>
+            <a
+              href="#"
+              data-discord-login
+              class="button primary"
+              style="background: #5865F2; border-color: #5865F2; padding: 10px 24px; font-size: 15px; font-weight: 600; display: inline-flex; align-items: center; gap: 8px;"
+            >
+              <span>Connect with Discord to Apply</span> →
+            </a>
+          </div>
+
+          <div
+            id="apply-existing-alert"
+            class="notice-strip info"
+            hidden
+            style="margin-bottom: 20px;"
+          >
+            <strong id="existing-app-title">Active application found</strong>
+            <p id="existing-app-desc" style="margin: 4px 0 10px;"></p>
+            <a href="status.html" class="button primary" style="font-size: 13px; padding: 6px 14px;">View Application Status →</a>
+          </div>
+
           <noscript
             ><p class="notice-strip error">
               Enable JavaScript to move through the application and review your
