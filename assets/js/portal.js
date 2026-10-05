@@ -269,7 +269,7 @@
       const meta = document.createElement("div");
       meta.className = "ticket-meta";
       const sender = document.createElement("strong");
-      sender.textContent = item.senderLabel || (item.senderType === "director" ? "Director" : "Applicant");
+      sender.textContent = item.senderType === "director" ? "Director" : (item.senderLabel || "Applicant");
       const when = document.createElement("span");
       when.textContent = item.sentAt || "";
       meta.append(sender, when);

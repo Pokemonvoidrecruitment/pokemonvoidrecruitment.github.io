@@ -530,7 +530,7 @@ app.post("/api/admin/applications/:id/interview/message", requireDirector, (req,
   try { messages = JSON.parse(ticket.messages_json); } catch {}
 
   const entry = {
-    senderLabel: req.user.global_name || req.user.username || "Director",
+    senderLabel: "Director",
     senderType: "director",
     sentAt: now.toLocaleString(),
     timestamp: now.toISOString(),
@@ -542,7 +542,7 @@ app.post("/api/admin/applications/:id/interview/message", requireDirector, (req,
   statements.saveInterview.run(row.id, ticket.status, JSON.stringify(messages), updatedNow);
 
   dmApplicant(row.discord_user_id, {
-    content: `💬 **[${req.user.global_name || req.user.username || "Director"}]**\n${text}`
+    content: `💬 **[Director]**\n${text}`
   });
 
   res.json({
