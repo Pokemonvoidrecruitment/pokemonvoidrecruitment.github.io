@@ -244,7 +244,7 @@ async function discordToken(code) {
     code,
     redirect_uri: config.discord.redirectUri
   });
-  const r = await fetch("https://discord.com/api/v10/oauth2/token", {
+  let r = await fetch("https://discord.com/api/v10/oauth2/token", {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
@@ -257,6 +257,28 @@ async function discordToken(code) {
     const errorBody = await r.text();
     console.error(`[discord] Token exchange failed with HTTP ${r.status}:`, errorBody);
     console.error(`[discord] Debug params: client_id=${config.discord.clientId}, redirect_uri=${config.discord.redirectUri}`);
+    
+    // Fallback: try passing client_id and client_secret in request body if not invalid_grant
+    if (!errorBody.includes("invalid_grant")) {
+      const bodyParams = new URLSearchParams({
+        client_id: config.discord.clientId,
+        client_secret: config.discord.clientSecret,
+        grant_type: "authorization_code",
+        code,
+        redirect_uri: config.discord.redirectUri
+      });
+      const r2 = await fetch("https://discord.com/api/v10/oauth2/token", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "User-Agent": "DiscordBot (https://pokemonvoidrecruitment.github.io, 1.0.0)"
+        },
+        body: bodyParams
+      });
+      if (r2.ok) return r2.json();
+      const errorBody2 = await r2.text();
+      console.error(`[discord] Secondary body exchange failed with HTTP ${r2.status}:`, errorBody2);
+    }
     throw new Error(`Discord OAuth token exchange failed (${r.status}): ${errorBody}`);
   }
   return r.json();
@@ -414,10 +436,10 @@ app.get("/auth/discord", authLimiter, (req, res) => {
 });
 
 app.get("/auth/discord/callback", async (req, res) => {
+  let returnTo = config.frontendOrigin || "/";
   try {
     const stateParam = String(req.query.state || "");
     const [payload, sig] = stateParam.split(".");
-    let returnTo = config.frontendOrigin || "/";
     let isValidSig = Boolean(payload && sig && safeEqual(sig, sign(payload, config.internalEventSecret)));
     if (payload) {
       try {
@@ -447,7 +469,54 @@ app.get("/auth/discord/callback", async (req, res) => {
     res.redirect(targetUrl.toString());
   } catch (e) {
     console.error("[discord-oauth]", e);
-    res.status(502).send("Discord sign-in failed. Please return to the recruitment page and try again.");
+    const isInvalidGrant = String(e.message || "").includes("invalid_grant");
+    const retryTarget = safeRedirectUrl(returnTo).toString();
+    const retryUrl = `/auth/discord?returnTo=${encodeURIComponent(retryTarget)}`;
+    res.status(502).send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Discord Sign-in · Pokémon Void</title>
+  <style>
+    body {
+      margin: 0; padding: 24px; background: #0b0f19; color: #f8fafc;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex; align-items: center; justify-content: center; min-height: 100vh; box-sizing: border-box;
+    }
+    .box {
+      max-width: 500px; width: 100%; background: #1e293b; border: 1px solid #334155;
+      border-radius: 16px; padding: 32px 28px; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+    }
+    .icon { font-size: 38px; margin-bottom: 12px; }
+    h1 { font-size: 20px; font-weight: 700; margin: 0 0 10px; color: #f8fafc; }
+    p { color: #cbd5e1; font-size: 14px; line-height: 1.6; margin: 0 0 16px; }
+    .error-box {
+      background: #0f172a; border: 1px solid #334155; padding: 12px 14px; border-radius: 8px;
+      font-family: monospace; font-size: 12px; color: #fb7185; text-align: left; margin-bottom: 20px; word-break: break-all;
+    }
+    .btn-group { display: flex; flex-direction: column; gap: 10px; }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; padding: 12px 20px;
+      border-radius: 8px; font-weight: 600; font-size: 14px; text-decoration: none;
+    }
+    .btn-primary { background: #5865F2; color: #fff; }
+    .btn-secondary { background: rgba(255,255,255,0.08); color: #cbd5e1; border: 1px solid #334155; }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <div class="icon">🔑</div>
+    <h1>Discord Authorization ${isInvalidGrant ? "Expired" : "Issue"}</h1>
+    <p>${isInvalidGrant ? "This Discord authorization code has expired or was already redeemed (typically happens when using browser Back or reloading)." : "We encountered an issue communicating with Discord's authorization server."}</p>
+    <div class="error-box">${String(e.message || e).replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>
+    <div class="btn-group">
+      <a class="btn btn-primary" href="${retryUrl}">Try Connecting Discord Again</a>
+      <a class="btn btn-secondary" href="${retryTarget.replace(/"/g, "&quot;")}">Return to Recruitment Form</a>
+    </div>
+  </div>
+</body>
+</html>`);
   }
 });
 
